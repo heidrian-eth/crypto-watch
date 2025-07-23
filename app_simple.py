@@ -269,6 +269,12 @@ def main():
         st.subheader("Futures Premium Metrics")
         st.markdown("Current premium metrics for BTC and ETH quarterly futures contracts.")
         premium_metrics_placeholder = st.empty()
+        
+        st.markdown("---")
+        
+        st.subheader("Volume Metrics")
+        st.markdown("Current trading volume metrics for BTC, ETH, Alt Index, and COIN-M futures contracts.")
+        volume_metrics_placeholder = st.empty()
     
     # Load historical price data from Binance
     @st.cache_data(ttl=300)  # Cache for 5 minutes
@@ -542,6 +548,91 @@ def main():
                                 column_config={
                                     "Contract": "Contract",
                                     "Current Premium": "Current",
+                                    "7d Change": "7d Change",
+                                    "7d High": "7d High",
+                                    "7d Low": "7d Low",
+                                    "7d Average": "7d Average",
+                                    "Volatility": "Volatility",
+                                    "Trend": "Direction"
+                                }
+                            )
+                
+                # Volume metrics table
+                if not volume_data.empty:
+                    with volume_metrics_placeholder.container():
+                        volume_metrics_data = []
+                        
+                        for column in volume_data.columns:
+                            volume_series = volume_data[column].dropna()
+                            if not volume_series.empty:
+                                current_volume = volume_series.iloc[-1]
+                                start_volume = volume_series.iloc[0]
+                                max_volume = volume_series.max()
+                                min_volume = volume_series.min()
+                                avg_volume = volume_series.mean()
+                                
+                                # Calculate metrics
+                                if start_volume > 0:
+                                    change_7d = ((current_volume - start_volume) / start_volume) * 100
+                                else:
+                                    change_7d = 0
+                                
+                                volatility = (volume_series.std() / avg_volume) * 100 if avg_volume > 0 else 0
+                                
+                                # Determine trend direction based on last 24 hours
+                                recent_trend = volume_series.tail(24)  # Last 24 hours
+                                if len(recent_trend) > 1:
+                                    recent_start = recent_trend.iloc[0]
+                                    recent_end = recent_trend.iloc[-1]
+                                    if recent_start > 0:
+                                        trend_change = ((recent_end - recent_start) / recent_start) * 100
+                                        trend_direction = "up" if trend_change > 10 else "down" if trend_change < -10 else "neutral"
+                                    else:
+                                        trend_direction = "neutral"
+                                else:
+                                    trend_direction = "neutral"
+                                
+                                # Format volume numbers
+                                def format_volume(vol):
+                                    if vol >= 1_000_000:
+                                        return f"{vol/1_000_000:.1f}M"
+                                    elif vol >= 1_000:
+                                        return f"{vol/1_000:.1f}K"
+                                    else:
+                                        return f"{vol:.1f}"
+                                
+                                volume_metrics_data.append({
+                                    'Asset': column,
+                                    'Current Volume': format_volume(current_volume),
+                                    '7d Change': f"{change_7d:+.1f}%",
+                                    '7d High': format_volume(max_volume),
+                                    '7d Low': format_volume(min_volume),
+                                    '7d Average': format_volume(avg_volume),
+                                    'Volatility': f"{volatility:.1f}%",
+                                    'Trend': f"📈 {trend_direction}" if trend_direction == "up" else f"📉 {trend_direction}" if trend_direction == "down" else "➡️ neutral"
+                                })
+                        
+                        if volume_metrics_data:
+                            # Create metrics columns
+                            volume_cols = st.columns(min(len(volume_metrics_data), 4))  # Limit to 4 columns for readability
+                            for idx, data in enumerate(volume_metrics_data[:4]):  # Show first 4 as metric cards
+                                with volume_cols[idx]:
+                                    asset_name = data['Asset'].replace(' 2025', '')
+                                    st.metric(
+                                        label=asset_name,
+                                        value=data['Current Volume'],
+                                        delta=data['7d Change']
+                                    )
+                            
+                            # Show detailed table
+                            volume_df = pd.DataFrame(volume_metrics_data)
+                            st.dataframe(
+                                volume_df,
+                                use_container_width=True,
+                                hide_index=True,
+                                column_config={
+                                    "Asset": "Asset",
+                                    "Current Volume": "Current",
                                     "7d Change": "7d Change",
                                     "7d High": "7d High",
                                     "7d Low": "7d Low",

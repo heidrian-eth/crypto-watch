@@ -5,6 +5,7 @@ from datetime import datetime
 import time
 import warnings
 from src.data.trends_fetcher import TrendsDataFetcher
+from src.data.binance_fetcher import BinanceFetcher
 from src.utils.config import Config
 
 # Suppress FutureWarning from pytrends
@@ -19,8 +20,8 @@ st.set_page_config(
 )
 
 @st.cache_resource
-def init_fetcher():
-    return TrendsDataFetcher()
+def init_fetchers():
+    return TrendsDataFetcher(), BinanceFetcher()
 
 def create_trends_chart(trends_df: pd.DataFrame, normalize=False):
     fig = go.Figure()
@@ -57,17 +58,45 @@ def create_trends_chart(trends_df: pd.DataFrame, normalize=False):
     
     return fig
 
+def create_price_chart(price_data: dict):
+    """Create normalized price chart for BTC and ETH from Binance data"""
+    fig = go.Figure()
+    
+    # Process each symbol
+    for symbol, df in price_data.items():
+        if not df.empty and 'price' in df.columns:
+            # Normalize to percentage of first value
+            normalized = (df['price'] / df['price'].iloc[0]) * 100
+            
+            fig.add_trace(go.Scatter(
+                x=df.index,
+                y=normalized,
+                mode='lines',
+                name=symbol,
+                line=dict(width=2)
+            ))
+    
+    fig.update_layout(
+        title="BTC & ETH Price Trends (7 Days, Hourly, Normalized to 100)",
+        xaxis_title="Date",
+        yaxis_title="Normalized Price (Base 100 = 7 days ago)",
+        height=500,
+        hovermode='x unified'
+    )
+    
+    return fig
+
 def main():
     st.title("🔍 Crypto Trends Dashboard")
     st.markdown("Monitor Google search trends for cryptocurrency keywords to spot volatility patterns")
     
-    trends_fetcher = init_fetcher()
+    trends_fetcher, binance_fetcher = init_fetchers()
     
     with st.sidebar:
         st.header("⚙️ Settings")
         
         auto_refresh = st.checkbox("Auto-refresh", value=True)
-        refresh_interval = st.slider("Refresh interval (seconds)", 30, 300, 60)
+        refresh_interval = st.slider("Refresh interval (seconds)", 30, 300, 300)
         
         st.markdown("---")
         st.markdown("### 📊 Tracked Keywords")
@@ -85,22 +114,52 @@ def main():
         st.subheader("Cryptocurrency Search Interest (Normalized for Volatility Analysis)")
         st.markdown("Each keyword is normalized to its own peak value (100%) to compare relative volatility patterns.")
         trends_chart_placeholder = st.empty()
+        
+        st.markdown("---")
+        
+        st.subheader("Price Trends (Normalized)")
+        st.markdown("BTC and ETH prices normalized to 100 from 7 days ago to compare relative performance.")
+        price_chart_placeholder = st.empty()
     
     with tab2:
         st.subheader("Trend Momentum Analysis")
         st.markdown("Key performance indicators for each tracked cryptocurrency keyword.")
         momentum_placeholder = st.empty()
+        
+        st.markdown("---")
+        
+        st.subheader("Crypto Price Metrics")
+        st.markdown("Current BTC and ETH price metrics and performance indicators.")
+        price_metrics_placeholder = st.empty()
+    
+    # Load historical price data from Binance
+    @st.cache_data(ttl=300)  # Cache for 5 minutes
+    def get_price_history():
+        if Config.BINANCE_API_KEY:
+            return binance_fetcher.get_multiple_symbols_historical(['BTC-USD', 'ETH-USD'], days=7)
+        else:
+            st.warning("No Binance API key found. Please add BINANCE_API_KEY to your .env file")
+            return {}
     
     while True:
         try:
             # Fetch trends data
             trends_df = trends_fetcher.get_trends_data(Config.TREND_KEYWORDS)
             
+            # Get price data
+            price_history = get_price_history()
+            
             if not trends_df.empty:
                 # Main trends chart
                 with trends_chart_placeholder.container():
                     fig = create_trends_chart(trends_df, normalize=True)
                     st.plotly_chart(fig, use_container_width=True, key="main_trends_chart")
+                
+                # Price chart
+                if price_history:
+                    with price_chart_placeholder.container():
+                        fig = create_price_chart(price_history)
+                        st.plotly_chart(fig, use_container_width=True, key="price_chart")
                 
                 # Momentum analysis for KPIs tab
                 momentum_data = trends_fetcher.calculate_trend_momentum(trends_df)
@@ -138,6 +197,71 @@ def main():
                             "trend": "Direction"
                         }
                     )
+                
+                # Price metrics table
+                if price_history:
+                    with price_metrics_placeholder.container():
+                        price_metrics_data = []
+                        
+                        for symbol, df in price_history.items():
+                            if not df.empty and 'price' in df.columns:
+                                current_price = df['price'].iloc[-1]
+                                start_price = df['price'].iloc[0]
+                                max_price = df['price'].max()
+                                min_price = df['price'].min()
+                                avg_price = df['price'].mean()
+                                
+                                # Calculate metrics
+                                change_7d = ((current_price - start_price) / start_price) * 100
+                                volatility = ((max_price - min_price) / avg_price) * 100
+                                
+                                # Determine trend direction
+                                recent_trend = df['price'].tail(24)  # Last 24 hours
+                                if len(recent_trend) > 1:
+                                    trend_change = recent_trend.iloc[-1] - recent_trend.iloc[0]
+                                    trend_direction = "up" if trend_change > 0 else "down" if trend_change < 0 else "neutral"
+                                else:
+                                    trend_direction = "neutral"
+                                
+                                price_metrics_data.append({
+                                    'Symbol': symbol.replace('-USD', ''),
+                                    'Current Price': f"${current_price:,.2f}",
+                                    '7d Change': f"{change_7d:+.1f}%",
+                                    '7d High': f"${max_price:,.2f}",
+                                    '7d Low': f"${min_price:,.2f}",
+                                    '7d Average': f"${avg_price:,.2f}",
+                                    'Volatility': f"{volatility:.1f}%",
+                                    'Trend': f"📈 {trend_direction}" if trend_direction == "up" else f"📉 {trend_direction}" if trend_direction == "down" else "➡️ neutral"
+                                })
+                        
+                        if price_metrics_data:
+                            # Create metrics columns
+                            price_cols = st.columns(len(price_metrics_data))
+                            for idx, data in enumerate(price_metrics_data):
+                                with price_cols[idx]:
+                                    st.metric(
+                                        label=data['Symbol'],
+                                        value=data['Current Price'],
+                                        delta=data['7d Change']
+                                    )
+                            
+                            # Show detailed table
+                            price_df = pd.DataFrame(price_metrics_data)
+                            st.dataframe(
+                                price_df,
+                                use_container_width=True,
+                                hide_index=True,
+                                column_config={
+                                    "Symbol": "Symbol",
+                                    "Current Price": "Current",
+                                    "7d Change": "7d Change",
+                                    "7d High": "7d High",
+                                    "7d Low": "7d Low",
+                                    "7d Average": "7d Average",
+                                    "Volatility": "Volatility",
+                                    "Trend": "Direction"
+                                }
+                            )
             else:
                 st.warning("⚠️ Unable to fetch Google Trends data. This may be due to rate limits. Please wait a few minutes and refresh.")
             

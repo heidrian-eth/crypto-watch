@@ -114,12 +114,19 @@ def create_futures_premium_chart(premiums_df: pd.DataFrame):
         )
     else:
         # Add premium lines for each contract
+        btc_colors = ['orange', 'red']
+        eth_colors = ['blue', 'purple']
+        btc_count = 0
+        eth_count = 0
+        
         for column in premiums_df.columns:
-            # Determine color based on contract
+            # Determine color based on contract type and order
             if 'BTC' in column:
-                color = 'orange' if 'Sep' in column else 'red'
+                color = btc_colors[btc_count % len(btc_colors)]
+                btc_count += 1
             else:  # ETH
-                color = 'blue' if 'Sep' in column else 'purple'
+                color = eth_colors[eth_count % len(eth_colors)]
+                eth_count += 1
             
             fig.add_trace(go.Scatter(
                 x=premiums_df.index,
@@ -191,6 +198,12 @@ def main():
         st.subheader("Crypto Price Metrics")
         st.markdown("Current BTC, ETH, and Alt Index price metrics and performance indicators.")
         price_metrics_placeholder = st.empty()
+        
+        st.markdown("---")
+        
+        st.subheader("Futures Premium Metrics")
+        st.markdown("Current premium metrics for BTC and ETH quarterly futures contracts.")
+        premium_metrics_placeholder = st.empty()
     
     # Load historical price data from Binance
     @st.cache_data(ttl=300)  # Cache for 5 minutes
@@ -381,6 +394,73 @@ def main():
                                 column_config={
                                     "Symbol": "Symbol",
                                     "Current Price": "Current",
+                                    "7d Change": "7d Change",
+                                    "7d High": "7d High",
+                                    "7d Low": "7d Low",
+                                    "7d Average": "7d Average",
+                                    "Volatility": "Volatility",
+                                    "Trend": "Direction"
+                                }
+                            )
+                
+                # Futures premium metrics table
+                if not futures_premiums.empty:
+                    with premium_metrics_placeholder.container():
+                        premium_metrics_data = []
+                        
+                        for column in futures_premiums.columns:
+                            premium_series = futures_premiums[column].dropna()
+                            if not premium_series.empty:
+                                current_premium = premium_series.iloc[-1]
+                                start_premium = premium_series.iloc[0]
+                                max_premium = premium_series.max()
+                                min_premium = premium_series.min()
+                                avg_premium = premium_series.mean()
+                                
+                                # Calculate metrics
+                                change_7d = current_premium - start_premium
+                                volatility = premium_series.std()
+                                
+                                # Determine trend direction
+                                recent_trend = premium_series.tail(24)  # Last 24 hours
+                                if len(recent_trend) > 1:
+                                    trend_change = recent_trend.iloc[-1] - recent_trend.iloc[0]
+                                    trend_direction = "up" if trend_change > 0.1 else "down" if trend_change < -0.1 else "neutral"
+                                else:
+                                    trend_direction = "neutral"
+                                
+                                premium_metrics_data.append({
+                                    'Contract': column,
+                                    'Current Premium': f"{current_premium:+.2f}%",
+                                    '7d Change': f"{change_7d:+.2f}pp",
+                                    '7d High': f"{max_premium:+.2f}%",
+                                    '7d Low': f"{min_premium:+.2f}%",
+                                    '7d Average': f"{avg_premium:+.2f}%",
+                                    'Volatility': f"{volatility:.2f}pp",
+                                    'Trend': f"📈 {trend_direction}" if trend_direction == "up" else f"📉 {trend_direction}" if trend_direction == "down" else "➡️ neutral"
+                                })
+                        
+                        if premium_metrics_data:
+                            # Create metrics columns
+                            premium_cols = st.columns(len(premium_metrics_data))
+                            for idx, data in enumerate(premium_metrics_data):
+                                with premium_cols[idx]:
+                                    contract_name = data['Contract'].replace(' 2025', '')
+                                    st.metric(
+                                        label=contract_name,
+                                        value=data['Current Premium'],
+                                        delta=data['7d Change']
+                                    )
+                            
+                            # Show detailed table
+                            premium_df = pd.DataFrame(premium_metrics_data)
+                            st.dataframe(
+                                premium_df,
+                                use_container_width=True,
+                                hide_index=True,
+                                column_config={
+                                    "Contract": "Contract",
+                                    "Current Premium": "Current",
                                     "7d Change": "7d Change",
                                     "7d High": "7d High",
                                     "7d Low": "7d Low",

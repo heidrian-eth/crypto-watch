@@ -147,6 +147,65 @@ def create_futures_premium_chart(premiums_df: pd.DataFrame):
     
     return fig
 
+def create_volume_chart(volume_df: pd.DataFrame):
+    """Create normalized volume chart for BTC, ETH, Alt Index, and COIN-M futures"""
+    fig = go.Figure()
+    
+    if volume_df.empty:
+        fig.add_annotation(
+            text="No volume data available",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=16, color="gray")
+        )
+    else:
+        # Define colors for different asset types
+        colors = {
+            'BTC-USD': 'orange',
+            'ETH-USD': 'blue', 
+            'Alt Index': 'purple',
+            'BTC Sep 2025': 'coral',
+            'BTC Dec 2025': 'red',
+            'ETH Sep 2025': 'lightblue',
+            'ETH Dec 2025': 'navy'
+        }
+        
+        # Add normalized volume lines for each asset
+        for column in volume_df.columns:
+            if column in volume_df.columns and not volume_df[column].empty:
+                # Normalize to percentage of first value (base 100)
+                first_value = volume_df[column].iloc[0]
+                if first_value > 0:
+                    normalized_volume = (volume_df[column] / first_value) * 100
+                else:
+                    normalized_volume = volume_df[column]
+                
+                color = colors.get(column, 'gray')
+                
+                # Determine line style
+                line_style = dict(width=3, color=color)
+                if 'Sep' in column or 'Dec' in column:  # Futures contracts
+                    line_style['dash'] = 'dash'
+                
+                fig.add_trace(go.Scatter(
+                    x=volume_df.index,
+                    y=normalized_volume,
+                    mode='lines',
+                    name=column,
+                    line=line_style
+                ))
+    
+    fig.update_layout(
+        title="Trading Volume (7 Days, Hourly, Normalized to 100)",
+        xaxis_title="Date",
+        yaxis_title="Normalized Volume (Base 100 = 7 days ago)",
+        height=500,
+        hovermode='x unified',
+        yaxis=dict(tickformat='.1f')  # One decimal place for normalized values
+    )
+    
+    return fig
+
 def main():
     st.title("🔍 Crypto Trends Dashboard")
     st.markdown("Monitor Google search trends for cryptocurrency keywords to spot volatility patterns")
@@ -187,6 +246,12 @@ def main():
         st.subheader("COIN-M Futures Premium")
         st.markdown("Premium percentage for BTC and ETH quarterly futures contracts compared to spot prices.")
         futures_premium_placeholder = st.empty()
+        
+        st.markdown("---")
+        
+        st.subheader("Trading Volume (Normalized)")
+        st.markdown("7-day hourly trading volume normalized to 100 from 7 days ago to compare relative volume changes across BTC, ETH, Alt Index, and COIN-M futures contracts.")
+        volume_chart_placeholder = st.empty()
     
     with tab2:
         st.subheader("Trend Momentum Analysis")
@@ -236,6 +301,14 @@ def main():
         else:
             return pd.DataFrame()
     
+    # Get volume data
+    @st.cache_data(ttl=300)  # Cache for 5 minutes
+    def get_volume_data():
+        if Config.BINANCE_API_KEY:
+            return binance_fetcher.calculate_volume_data(days=7)
+        else:
+            return pd.DataFrame()
+    
     while True:
         try:
             # Fetch trends data
@@ -247,6 +320,9 @@ def main():
             
             # Get futures premiums
             futures_premiums = get_futures_premiums()
+            
+            # Get volume data
+            volume_data = get_volume_data()
             
             if not trends_df.empty:
                 # Main trends chart
@@ -264,6 +340,11 @@ def main():
                 with futures_premium_placeholder.container():
                     fig = create_futures_premium_chart(futures_premiums)
                     st.plotly_chart(fig, use_container_width=True, key="futures_premium_chart")
+                
+                # Volume chart
+                with volume_chart_placeholder.container():
+                    fig = create_volume_chart(volume_data)
+                    st.plotly_chart(fig, use_container_width=True, key="volume_chart")
                 
                 # Momentum analysis for KPIs tab
                 momentum_data = trends_fetcher.calculate_trend_momentum(trends_df)

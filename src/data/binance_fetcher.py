@@ -199,6 +199,138 @@ class BinanceFetcher:
         
         return pd.DataFrame({'price': weighted_prices}, index=all_timestamps)
     
+    def get_24hr_ticker_stats(self, symbols: List[str]) -> Dict[str, Dict]:
+        """Get 24hr ticker statistics including volume data"""
+        cache_key = f"ticker_stats_{'_'.join(symbols)}"
+        cached_data = self._get_from_cache(cache_key, ttl_minutes=5)
+        if cached_data is not None:
+            return cached_data
+        
+        try:
+            # Map our symbols to Binance format
+            binance_symbols = []
+            for symbol in symbols:
+                binance_symbol = symbol.replace('-USD', 'USDT')
+                binance_symbols.append(binance_symbol)
+            
+            url = f"{self.base_url}/ticker/24hr"
+            params = {'symbols': str(binance_symbols).replace("'", '"')}
+            
+            response = requests.get(url, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                result = {}
+                for item in data:
+                    # Convert back to our symbol format
+                    our_symbol = item['symbol'].replace('USDT', '-USD')
+                    if our_symbol in symbols:
+                        result[our_symbol] = {
+                            'volume': float(item['volume']),
+                            'quoteVolume': float(item['quoteVolume']),
+                            'count': int(item['count']),
+                            'priceChange': float(item['priceChange']),
+                            'priceChangePercent': float(item['priceChangePercent']),
+                            'weightedAvgPrice': float(item['weightedAvgPrice']),
+                            'highPrice': float(item['highPrice']),
+                            'lowPrice': float(item['lowPrice'])
+                        }
+                
+                self._save_to_cache(cache_key, result)
+                return result
+            else:
+                print(f"Error fetching 24hr ticker stats: {response.status_code}")
+                return {}
+                
+        except Exception as e:
+            print(f"Error fetching 24hr ticker stats: {e}")
+            return {}
+    
+    def calculate_volume_data(self, days: int = 7) -> pd.DataFrame:
+        """Calculate volume data for BTC, ETH, Alt Index, and COIN-M futures"""
+        try:
+            volume_data = {}
+            
+            # Get spot volume data from historical klines
+            main_symbols = ['BTC-USD', 'ETH-USD']
+            alt_symbols = ['BNB-USD', 'SOL-USD', 'XRP-USD', 'ADA-USD', 'DOGE-USD', 'MATIC-USD', 'AVAX-USD', 'DOT-USD']
+            all_spot_symbols = main_symbols + alt_symbols
+            
+            spot_data = self.get_multiple_symbols_historical(all_spot_symbols, days=days)
+            
+            # Process BTC and ETH spot volume
+            for symbol in main_symbols:
+                if symbol in spot_data and not spot_data[symbol].empty and 'volume' in spot_data[symbol].columns:
+                    volume_data[symbol] = spot_data[symbol]['volume']
+            
+            # Calculate Alt Index weighted volume
+            if len([s for s in alt_symbols if s in spot_data]) > 0:
+                alt_volume_series = self.calculate_alt_weighted_volume(spot_data, alt_symbols)
+                if not alt_volume_series.empty:
+                    volume_data['Alt Index'] = alt_volume_series
+            
+            # Get COIN-M futures volume data
+            for asset in ['BTC', 'ETH']:
+                for symbol in Config.COINM_FUTURES_SYMBOLS[asset]:
+                    futures_df = self.get_coinm_klines(symbol, interval='1h', days=days)
+                    if not futures_df.empty and 'volume' in futures_df.columns:
+                        display_name = Config.FUTURES_DISPLAY_NAMES.get(symbol, symbol)
+                        volume_data[display_name] = futures_df['volume']
+            
+            if volume_data:
+                return pd.DataFrame(volume_data)
+            else:
+                print("No volume data available")
+                return pd.DataFrame()
+                
+        except Exception as e:
+            print(f"Error calculating volume data: {e}")
+            return pd.DataFrame()
+    
+    def calculate_alt_weighted_volume(self, spot_data: Dict[str, pd.DataFrame], alt_symbols: List[str]) -> pd.Series:
+        """Calculate weighted volume for Alt Index using market cap weights"""
+        try:
+            # Use the same weights as the Alt Index price calculation
+            weights = {
+                'BNB-USD': 0.20,   # ~20% weight
+                'SOL-USD': 0.18,   # ~18% weight
+                'XRP-USD': 0.15,   # ~15% weight
+                'ADA-USD': 0.12,   # ~12% weight
+                'DOGE-USD': 0.12,  # ~12% weight
+                'MATIC-USD': 0.10, # ~10% weight
+                'AVAX-USD': 0.08,  # ~8% weight
+                'DOT-USD': 0.05    # ~5% weight
+            }
+            
+            # Find common timestamps
+            all_timestamps = None
+            for symbol in alt_symbols:
+                if symbol in spot_data and not spot_data[symbol].empty:
+                    if all_timestamps is None:
+                        all_timestamps = spot_data[symbol].index
+                    else:
+                        all_timestamps = all_timestamps.intersection(spot_data[symbol].index)
+            
+            if all_timestamps is None or all_timestamps.empty:
+                return pd.Series()
+            
+            # Calculate weighted volume
+            weighted_volume = pd.Series(0.0, index=all_timestamps)
+            
+            for symbol in alt_symbols:
+                if symbol in spot_data and not spot_data[symbol].empty and 'volume' in spot_data[symbol].columns:
+                    weight = weights.get(symbol, 0.01)  # Default small weight
+                    # Align data to common timestamps
+                    aligned_volume = spot_data[symbol].loc[all_timestamps, 'volume']
+                    weighted_volume += aligned_volume * weight
+            
+            return weighted_volume
+            
+        except Exception as e:
+            print(f"Error calculating alt weighted volume: {e}")
+            return pd.Series()
+    
     def get_coinm_exchange_info(self) -> Dict:
         """Get COIN-M futures exchange info to find available contracts"""
         cache_key = "coinm_exchange_info"

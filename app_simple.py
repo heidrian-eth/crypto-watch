@@ -20,7 +20,7 @@ st.set_page_config(
 )
 
 @st.cache_resource
-def init_fetchers():
+def init_fetchers_v2():
     return TrendsDataFetcher(), BinanceFetcher()
 
 def create_trends_chart(trends_df: pd.DataFrame, normalize=False):
@@ -101,11 +101,50 @@ def create_price_chart(price_data: dict, alt_index: pd.DataFrame = None):
     
     return fig
 
+def create_futures_premium_chart(premiums_df: pd.DataFrame):
+    """Create futures premium chart for BTC and ETH quarterly contracts"""
+    fig = go.Figure()
+    
+    if premiums_df.empty:
+        fig.add_annotation(
+            text="No futures premium data available",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=16, color="gray")
+        )
+    else:
+        # Add premium lines for each contract
+        for column in premiums_df.columns:
+            # Determine color based on contract
+            if 'BTC' in column:
+                color = 'orange' if 'Sep' in column else 'red'
+            else:  # ETH
+                color = 'blue' if 'Sep' in column else 'purple'
+            
+            fig.add_trace(go.Scatter(
+                x=premiums_df.index,
+                y=premiums_df[column],
+                mode='lines',
+                name=column,  # Use the clean display name from config
+                line=dict(width=2, color=color)
+            ))
+    
+    fig.update_layout(
+        title="COIN-M Futures Premium (7 Days, Hourly)",
+        xaxis_title="Date",
+        yaxis_title="Premium (%)",
+        height=500,
+        hovermode='x unified',
+        yaxis=dict(tickformat='.2f')
+    )
+    
+    return fig
+
 def main():
     st.title("🔍 Crypto Trends Dashboard")
     st.markdown("Monitor Google search trends for cryptocurrency keywords to spot volatility patterns")
     
-    trends_fetcher, binance_fetcher = init_fetchers()
+    trends_fetcher, binance_fetcher = init_fetchers_v2()
     
     with st.sidebar:
         st.header("⚙️ Settings")
@@ -135,6 +174,12 @@ def main():
         st.subheader("Price Trends (Normalized)")
         st.markdown("BTC, ETH, and Alt Index (next 8 cryptos after BTC/ETH) normalized to 100 from 7 days ago to compare relative performance.")
         price_chart_placeholder = st.empty()
+        
+        st.markdown("---")
+        
+        st.subheader("COIN-M Futures Premium")
+        st.markdown("Premium percentage for BTC and ETH quarterly futures contracts compared to spot prices.")
+        futures_premium_placeholder = st.empty()
     
     with tab2:
         st.subheader("Trend Momentum Analysis")
@@ -170,6 +215,14 @@ def main():
             return binance_fetcher.calculate_weighted_index(alt_data)
         return pd.DataFrame()
     
+    # Get futures premiums
+    @st.cache_data(ttl=300)  # Cache for 5 minutes
+    def get_futures_premiums():
+        if Config.BINANCE_API_KEY:
+            return binance_fetcher.calculate_futures_premiums(days=7)
+        else:
+            return pd.DataFrame()
+    
     while True:
         try:
             # Fetch trends data
@@ -178,6 +231,9 @@ def main():
             # Get price data
             price_history = get_price_history()
             alt_index = get_alt_index(price_history)
+            
+            # Get futures premiums
+            futures_premiums = get_futures_premiums()
             
             if not trends_df.empty:
                 # Main trends chart
@@ -190,6 +246,11 @@ def main():
                     with price_chart_placeholder.container():
                         fig = create_price_chart(price_history, alt_index)
                         st.plotly_chart(fig, use_container_width=True, key="price_chart")
+                
+                # Futures premium chart
+                with futures_premium_placeholder.container():
+                    fig = create_futures_premium_chart(futures_premiums)
+                    st.plotly_chart(fig, use_container_width=True, key="futures_premium_chart")
                 
                 # Momentum analysis for KPIs tab
                 momentum_data = trends_fetcher.calculate_trend_momentum(trends_df)

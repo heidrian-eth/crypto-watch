@@ -32,6 +32,20 @@ class Config:
         'Cardano'
     ]
     
+    # COIN-M Futures symbols for premium calculation
+    COINM_FUTURES_SYMBOLS = {
+        'BTC': ['BTCUSD_250926', 'BTCUSD_251226'],  # Sep 2025, Dec 2025
+        'ETH': ['ETHUSD_250926', 'ETHUSD_251226']   # Sep 2025, Dec 2025
+    }
+    
+    # Display names for futures contracts
+    FUTURES_DISPLAY_NAMES = {
+        'BTCUSD_250926': 'BTC Sep 2025',
+        'BTCUSD_251226': 'BTC Dec 2025',
+        'ETHUSD_250926': 'ETH Sep 2025',
+        'ETHUSD_251226': 'ETH Dec 2025'
+    }
+    
     PRICE_PAIRS = ['BTCUSD', 'ETHUSD']
     
     TOP_CRYPTOS_COUNT = 8

@@ -58,13 +58,15 @@ def create_trends_chart(trends_df: pd.DataFrame, normalize=False):
     
     return fig
 
-def create_price_chart(price_data: dict):
-    """Create normalized price chart for BTC and ETH from Binance data"""
+def create_price_chart(price_data: dict, alt_index: pd.DataFrame = None):
+    """Create normalized price chart for BTC, ETH and Alt Index from Binance data"""
     fig = go.Figure()
     
-    # Process each symbol
-    for symbol, df in price_data.items():
-        if not df.empty and 'price' in df.columns:
+    # Process BTC and ETH first
+    main_symbols = ['BTC-USD', 'ETH-USD']
+    for symbol in main_symbols:
+        if symbol in price_data and not price_data[symbol].empty and 'price' in price_data[symbol].columns:
+            df = price_data[symbol]
             # Normalize to percentage of first value
             normalized = (df['price'] / df['price'].iloc[0]) * 100
             
@@ -72,12 +74,25 @@ def create_price_chart(price_data: dict):
                 x=df.index,
                 y=normalized,
                 mode='lines',
-                name=symbol,
+                name=symbol.replace('-USD', ''),
                 line=dict(width=2)
             ))
     
+    # Add Alt Index if available
+    if alt_index is not None and not alt_index.empty and 'price' in alt_index.columns:
+        # Normalize to percentage of first value
+        normalized_index = (alt_index['price'] / alt_index['price'].iloc[0]) * 100
+        
+        fig.add_trace(go.Scatter(
+            x=alt_index.index,
+            y=normalized_index,
+            mode='lines',
+            name='Alt Index (Next 8 Cryptos)',
+            line=dict(width=3, dash='dash', color='purple')
+        ))
+    
     fig.update_layout(
-        title="BTC & ETH Price Trends (7 Days, Hourly, Normalized to 100)",
+        title="BTC, ETH & Alt Index Price Trends (7 Days, Hourly, Normalized to 100)",
         xaxis_title="Date",
         yaxis_title="Normalized Price (Base 100 = 7 days ago)",
         height=500,
@@ -118,7 +133,7 @@ def main():
         st.markdown("---")
         
         st.subheader("Price Trends (Normalized)")
-        st.markdown("BTC and ETH prices normalized to 100 from 7 days ago to compare relative performance.")
+        st.markdown("BTC, ETH, and Alt Index (next 8 cryptos after BTC/ETH) normalized to 100 from 7 days ago to compare relative performance.")
         price_chart_placeholder = st.empty()
     
     with tab2:
@@ -129,17 +144,31 @@ def main():
         st.markdown("---")
         
         st.subheader("Crypto Price Metrics")
-        st.markdown("Current BTC and ETH price metrics and performance indicators.")
+        st.markdown("Current BTC, ETH, and Alt Index price metrics and performance indicators.")
         price_metrics_placeholder = st.empty()
     
     # Load historical price data from Binance
     @st.cache_data(ttl=300)  # Cache for 5 minutes
     def get_price_history():
         if Config.BINANCE_API_KEY:
-            return binance_fetcher.get_multiple_symbols_historical(['BTC-USD', 'ETH-USD'], days=7)
+            # Get BTC and ETH for main display
+            main_symbols = ['BTC-USD', 'ETH-USD']
+            # Alt coins for the index (next 8 after BTC/ETH by market cap)
+            alt_symbols = ['BNB-USD', 'SOL-USD', 'XRP-USD', 'ADA-USD', 'DOGE-USD', 'MATIC-USD', 'AVAX-USD', 'DOT-USD']
+            all_symbols = main_symbols + alt_symbols
+            return binance_fetcher.get_multiple_symbols_historical(all_symbols, days=7)
         else:
             st.warning("No Binance API key found. Please add BINANCE_API_KEY to your .env file")
             return {}
+    
+    # Calculate Alt Index (excluding BTC and ETH)
+    @st.cache_data(ttl=300)  # Cache for 5 minutes
+    def get_alt_index(price_history):
+        if price_history:
+            # Filter out BTC and ETH for Alt Index
+            alt_data = {k: v for k, v in price_history.items() if k not in ['BTC-USD', 'ETH-USD']}
+            return binance_fetcher.calculate_weighted_index(alt_data)
+        return pd.DataFrame()
     
     while True:
         try:
@@ -148,6 +177,7 @@ def main():
             
             # Get price data
             price_history = get_price_history()
+            alt_index = get_alt_index(price_history)
             
             if not trends_df.empty:
                 # Main trends chart
@@ -158,7 +188,7 @@ def main():
                 # Price chart
                 if price_history:
                     with price_chart_placeholder.container():
-                        fig = create_price_chart(price_history)
+                        fig = create_price_chart(price_history, alt_index)
                         st.plotly_chart(fig, use_container_width=True, key="price_chart")
                 
                 # Momentum analysis for KPIs tab
@@ -203,8 +233,11 @@ def main():
                     with price_metrics_placeholder.container():
                         price_metrics_data = []
                         
-                        for symbol, df in price_history.items():
-                            if not df.empty and 'price' in df.columns:
+                        # Process BTC and ETH first
+                        main_symbols = ['BTC-USD', 'ETH-USD']
+                        for symbol in main_symbols:
+                            if symbol in price_history and not price_history[symbol].empty and 'price' in price_history[symbol].columns:
+                                df = price_history[symbol]
                                 current_price = df['price'].iloc[-1]
                                 start_price = df['price'].iloc[0]
                                 max_price = df['price'].max()
@@ -234,13 +267,46 @@ def main():
                                     'Trend': f"📈 {trend_direction}" if trend_direction == "up" else f"📉 {trend_direction}" if trend_direction == "down" else "➡️ neutral"
                                 })
                         
+                        # Add Alt Index metrics
+                        if not alt_index.empty and 'price' in alt_index.columns:
+                            df = alt_index
+                            current_price = df['price'].iloc[-1]
+                            start_price = df['price'].iloc[0]
+                            max_price = df['price'].max()
+                            min_price = df['price'].min()
+                            avg_price = df['price'].mean()
+                            
+                            # Calculate metrics
+                            change_7d = ((current_price - start_price) / start_price) * 100
+                            volatility = ((max_price - min_price) / avg_price) * 100
+                            
+                            # Determine trend direction
+                            recent_trend = df['price'].tail(24)  # Last 24 hours
+                            if len(recent_trend) > 1:
+                                trend_change = recent_trend.iloc[-1] - recent_trend.iloc[0]
+                                trend_direction = "up" if trend_change > 0 else "down" if trend_change < 0 else "neutral"
+                            else:
+                                trend_direction = "neutral"
+                            
+                            price_metrics_data.append({
+                                'Symbol': 'ALT-INDEX',
+                                'Current Price': f"${current_price:,.2f}",
+                                '7d Change': f"{change_7d:+.1f}%",
+                                '7d High': f"${max_price:,.2f}",
+                                '7d Low': f"${min_price:,.2f}",
+                                '7d Average': f"${avg_price:,.2f}",
+                                'Volatility': f"{volatility:.1f}%",
+                                'Trend': f"📈 {trend_direction}" if trend_direction == "up" else f"📉 {trend_direction}" if trend_direction == "down" else "➡️ neutral"
+                            })
+                        
                         if price_metrics_data:
                             # Create metrics columns
                             price_cols = st.columns(len(price_metrics_data))
                             for idx, data in enumerate(price_metrics_data):
                                 with price_cols[idx]:
+                                    label = data['Symbol'] if data['Symbol'] != 'ALT-INDEX' else 'Alt Index'
                                     st.metric(
-                                        label=data['Symbol'],
+                                        label=label,
                                         value=data['Current Price'],
                                         delta=data['7d Change']
                                     )

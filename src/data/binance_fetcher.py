@@ -97,7 +97,9 @@ class BinanceFetcher:
             'XRP-USD': 'XRPUSDT',
             'ADA-USD': 'ADAUSDT',
             'DOGE-USD': 'DOGEUSDT',
-            'MATIC-USD': 'MATICUSDT'
+            'MATIC-USD': 'MATICUSDT',
+            'AVAX-USD': 'AVAXUSDT',
+            'DOT-USD': 'DOTUSDT'
         }
         
         for symbol in symbols:
@@ -136,7 +138,9 @@ class BinanceFetcher:
                     'XRP-USD': 'XRPUSDT',
                     'ADA-USD': 'ADAUSDT',
                     'DOGE-USD': 'DOGEUSDT',
-                    'MATIC-USD': 'MATICUSDT'
+                    'MATIC-USD': 'MATICUSDT',
+                    'AVAX-USD': 'AVAXUSDT',
+                    'DOT-USD': 'DOTUSDT'
                 }
                 
                 result = {}
@@ -160,16 +164,16 @@ class BinanceFetcher:
         if not historical_data:
             return pd.DataFrame()
         
-        # Approximate market cap weights
+        # Market cap weights for Alt Index (excluding BTC/ETH)
         weights = {
-            'BTC-USD': 0.45,   # ~45% weight
-            'ETH-USD': 0.20,   # ~20% weight  
-            'BNB-USD': 0.08,   # ~8% weight
-            'SOL-USD': 0.07,   # ~7% weight
-            'XRP-USD': 0.06,   # ~6% weight
-            'ADA-USD': 0.05,   # ~5% weight
-            'DOGE-USD': 0.05,  # ~5% weight
-            'MATIC-USD': 0.04  # ~4% weight
+            'BNB-USD': 0.20,   # ~20% weight
+            'SOL-USD': 0.18,   # ~18% weight
+            'XRP-USD': 0.15,   # ~15% weight
+            'ADA-USD': 0.12,   # ~12% weight
+            'DOGE-USD': 0.12,  # ~12% weight
+            'MATIC-USD': 0.10, # ~10% weight
+            'AVAX-USD': 0.08,  # ~8% weight
+            'DOT-USD': 0.05    # ~5% weight
         }
         
         # Find common timestamps

@@ -331,6 +331,156 @@ class BinanceFetcher:
             print(f"Error calculating alt weighted volume: {e}")
             return pd.Series()
     
+    def get_5min_klines(self, symbol: str, days: int = 7) -> pd.DataFrame:
+        """Get 5-minute kline data for high-frequency volatility analysis"""
+        cache_key = f"5min_klines_{symbol}_{days}"
+        cached_data = self._get_from_cache(cache_key, ttl_minutes=15)
+        if cached_data is not None:
+            return cached_data
+        
+        try:
+            # Calculate total datapoints needed
+            total_points = days * 24 * 12  # 5-min intervals
+            limit_per_request = 1000  # Binance API limit
+            
+            all_data = []
+            end_time = int(datetime.now().timestamp() * 1000)
+            
+            # Make multiple requests if needed
+            while len(all_data) < total_points:
+                remaining_points = total_points - len(all_data)
+                current_limit = min(limit_per_request, remaining_points)
+                
+                url = f"{self.base_url}/klines"
+                params = {
+                    'symbol': symbol,
+                    'interval': '5m',
+                    'endTime': end_time,
+                    'limit': current_limit
+                }
+                
+                response = requests.get(url, params=params, timeout=10)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if not data:
+                        break  # No more data available
+                    
+                    # Prepend data (since we're going backwards in time)
+                    all_data = data + all_data
+                    
+                    # Update end_time to the timestamp of the earliest data point
+                    end_time = int(data[0][0]) - 1  # 1ms before the first timestamp
+                    
+                    # Small delay to respect rate limits
+                    time.sleep(0.1)
+                else:
+                    print(f"Error fetching 5-min klines for {symbol}: {response.status_code}")
+                    break
+            
+            if all_data:
+                # Convert to DataFrame
+                df = pd.DataFrame(all_data, columns=[
+                    'timestamp', 'open', 'high', 'low', 'close', 'volume',
+                    'close_time', 'quote_asset_volume', 'number_of_trades',
+                    'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'
+                ])
+                
+                # Convert timestamp and prices
+                df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                df['price'] = df['close'].astype(float)
+                df['open'] = df['open'].astype(float)
+                df['high'] = df['high'].astype(float)
+                df['low'] = df['low'].astype(float)
+                df['volume'] = df['volume'].astype(float)
+                
+                # Set timestamp as index and sort
+                df.set_index('timestamp', inplace=True)
+                df.sort_index(inplace=True)
+                
+                # Keep only the columns we need
+                df = df[['price', 'open', 'high', 'low', 'volume']]
+                
+                # Trim to exact number of days requested
+                cutoff_time = df.index.max() - pd.Timedelta(days=days)
+                df = df[df.index >= cutoff_time]
+                
+                self._save_to_cache(cache_key, df)
+                return df
+            else:
+                print(f"No 5-min klines data received for {symbol}")
+                return pd.DataFrame()
+                
+        except Exception as e:
+            print(f"Error fetching 5-min klines for {symbol}: {e}")
+            return pd.DataFrame()
+    
+    def calculate_high_freq_volatility(self, days: int = 7) -> pd.DataFrame:
+        """Calculate high-frequency volatility using 5-min data and hourly LMS regression"""
+        try:
+            import numpy as np
+            from scipy import stats
+            
+            volatility_data = {}
+            
+            # Get 5-minute data for BTC and ETH
+            symbols = {'BTCUSDT': 'BTC', 'ETHUSDT': 'ETH'}
+            
+            for binance_symbol, display_name in symbols.items():
+                df_5min = self.get_5min_klines(binance_symbol, days=days)
+                
+                if df_5min.empty:
+                    continue
+                
+                # Group into 1-hour bins (12 x 5-minute intervals)
+                hourly_volatility = []
+                hourly_timestamps = []
+                
+                # Resample to get hour boundaries, then process each hour
+                df_5min_copy = df_5min.copy()
+                df_5min_copy['hour'] = df_5min_copy.index.floor('h')
+                
+                for hour_start, hour_group in df_5min_copy.groupby('hour'):
+                    if len(hour_group) >= 6:  # Need at least 6 points for meaningful regression
+                        prices = hour_group['price'].values
+                        
+                        # Create time index for regression (0, 1, 2, ..., n-1)
+                        time_index = np.arange(len(prices))
+                        
+                        # Calculate LMS (Least Mean Squares) regression
+                        slope, intercept, r_value, p_value, std_err = stats.linregress(time_index, prices)
+                        
+                        # Calculate regression line
+                        regression_line = slope * time_index + intercept
+                        
+                        # Subtract trend to get detrended residuals
+                        residuals = prices - regression_line
+                        
+                        # Calculate standard deviation of residuals (high-freq volatility)
+                        hf_volatility = np.std(residuals, ddof=1)  # Sample standard deviation
+                        
+                        hourly_volatility.append(hf_volatility)
+                        hourly_timestamps.append(hour_start)
+                
+                if hourly_volatility:
+                    # Create series with hourly timestamps
+                    volatility_series = pd.Series(
+                        hourly_volatility, 
+                        index=pd.to_datetime(hourly_timestamps),
+                        name=f'{display_name}_HF_Volatility'
+                    )
+                    volatility_data[display_name] = volatility_series
+            
+            if volatility_data:
+                return pd.DataFrame(volatility_data)
+            else:
+                print("No high-frequency volatility data available")
+                return pd.DataFrame()
+                
+        except Exception as e:
+            print(f"Error calculating high-frequency volatility: {e}")
+            return pd.DataFrame()
+    
     def get_coinm_exchange_info(self) -> Dict:
         """Get COIN-M futures exchange info to find available contracts"""
         cache_key = "coinm_exchange_info"

@@ -6,3 +6,4 @@ requests
 pytrends
 python-dotenv
 pycoingecko
+scipy

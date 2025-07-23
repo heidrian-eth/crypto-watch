@@ -206,6 +206,52 @@ def create_volume_chart(volume_df: pd.DataFrame):
     
     return fig
 
+def create_hf_volatility_chart(hf_vol_df: pd.DataFrame):
+    """Create normalized high-frequency volatility chart for BTC and ETH"""
+    fig = go.Figure()
+    
+    if hf_vol_df.empty:
+        fig.add_annotation(
+            text="No high-frequency volatility data available",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=16, color="gray")
+        )
+    else:
+        # Define colors for BTC and ETH
+        colors = {'BTC': 'orange', 'ETH': 'blue'}
+        
+        # Add normalized volatility lines for each asset
+        for column in hf_vol_df.columns:
+            if column in hf_vol_df.columns and not hf_vol_df[column].empty:
+                # Normalize to percentage of first value (base 100)
+                first_value = hf_vol_df[column].iloc[0]
+                if first_value > 0:
+                    normalized_volatility = (hf_vol_df[column] / first_value) * 100
+                else:
+                    normalized_volatility = hf_vol_df[column]
+                
+                color = colors.get(column, 'gray')
+                
+                fig.add_trace(go.Scatter(
+                    x=hf_vol_df.index,
+                    y=normalized_volatility,
+                    mode='lines',
+                    name=f'{column} HF Volatility',
+                    line=dict(width=2, color=color)
+                ))
+    
+    fig.update_layout(
+        title="High-Frequency Volatility (7 Days, Hourly, Normalized to 100)",
+        xaxis_title="Date",
+        yaxis_title="Normalized Volatility (Base 100 = 7 days ago)",
+        height=500,
+        hovermode='x unified',
+        yaxis=dict(tickformat='.1f')  # One decimal place for normalized values
+    )
+    
+    return fig
+
 def main():
     st.title("🔍 Crypto Trends Dashboard")
     st.markdown("Monitor Google search trends for cryptocurrency keywords to spot volatility patterns")
@@ -252,6 +298,12 @@ def main():
         st.subheader("Trading Volume (Normalized)")
         st.markdown("7-day hourly trading volume normalized to 100 from 7 days ago to compare relative volume changes across BTC, ETH, Alt Index, and COIN-M futures contracts.")
         volume_chart_placeholder = st.empty()
+        
+        st.markdown("---")
+        
+        st.subheader("High-Frequency Volatility (Normalized)")
+        st.markdown("Intra-hour volatility calculated from 5-minute data using LMS regression detrending, normalized to 100 from 7 days ago to compare relative volatility changes.")
+        hf_volatility_placeholder = st.empty()
     
     with tab2:
         st.subheader("Trend Momentum Analysis")
@@ -315,6 +367,14 @@ def main():
         else:
             return pd.DataFrame()
     
+    # Get high-frequency volatility data
+    @st.cache_data(ttl=300)  # Cache for 5 minutes
+    def get_hf_volatility():
+        if Config.BINANCE_API_KEY:
+            return binance_fetcher.calculate_high_freq_volatility(days=7)
+        else:
+            return pd.DataFrame()
+    
     while True:
         try:
             # Fetch trends data
@@ -329,6 +389,9 @@ def main():
             
             # Get volume data
             volume_data = get_volume_data()
+            
+            # Get high-frequency volatility data
+            hf_volatility = get_hf_volatility()
             
             if not trends_df.empty:
                 # Main trends chart
@@ -351,6 +414,11 @@ def main():
                 with volume_chart_placeholder.container():
                     fig = create_volume_chart(volume_data)
                     st.plotly_chart(fig, use_container_width=True, key="volume_chart")
+                
+                # High-frequency volatility chart
+                with hf_volatility_placeholder.container():
+                    fig = create_hf_volatility_chart(hf_volatility)
+                    st.plotly_chart(fig, use_container_width=True, key="hf_volatility_chart")
                 
                 # Momentum analysis for KPIs tab
                 momentum_data = trends_fetcher.calculate_trend_momentum(trends_df)

@@ -7,6 +7,7 @@ import warnings
 from src.data.trends_fetcher import TrendsDataFetcher
 from src.data.binance_fetcher import BinanceFetcher
 from src.utils.config import Config
+from src.utils.notifications import notification_service
 
 # Suppress FutureWarning from pytrends
 warnings.filterwarnings('ignore', category=FutureWarning, module='pytrends')
@@ -265,6 +266,25 @@ def main():
         refresh_interval = st.slider("Refresh interval (seconds)", 30, 300, 300)
         
         st.markdown("---")
+        st.markdown("### 🔔 Notifications")
+        
+        notifications_enabled = st.checkbox("Enable Push Notifications", value=True)
+        if notifications_enabled:
+            notification_service.enable()
+            
+            # Request notification permission on first enable
+            if st.button("🔐 Request Browser Permission"):
+                notification_service.request_permission()
+                st.info("Check your browser for notification permission request")
+            
+            # Test notification button
+            if st.button("🧪 Test Notification"):
+                notification_service.send_test_notification()
+                st.success("Test notification sent!")
+        else:
+            notification_service.disable()
+        
+        st.markdown("---")
         st.markdown("### 📊 Tracked Keywords")
         for keyword in Config.TREND_KEYWORDS:
             st.markdown(f"- {keyword}")
@@ -377,6 +397,18 @@ def main():
     
     while True:
         try:
+            # Alert detection system - trigger every 5 minutes
+            current_time = datetime.now()
+            current_minutes = current_time.minute
+            
+            # Check if current minute is divisible by 5 (0, 5, 10, 15, etc.)
+            if current_minutes % 5 == 0:
+                notification_service.send_browser_notification(
+                    title="🔔 Crypto Dashboard Alert",
+                    body=f"Periodic alert triggered at {current_time.strftime('%H:%M')} - Dashboard refreshing every 5 minutes",
+                    tag="periodic_alert"
+                )
+            
             # Fetch trends data
             trends_df = trends_fetcher.get_trends_data(Config.TREND_KEYWORDS)
             
@@ -397,31 +429,41 @@ def main():
                 # Main trends chart
                 with trends_chart_placeholder.container():
                     fig = create_trends_chart(trends_df, normalize=True)
-                    st.plotly_chart(fig, use_container_width=True, key="main_trends_chart")
+                    st.plotly_chart(fig, use_container_width=True, key=f"trends_chart_{int(time.time())}")
                 
                 # Price chart
                 if price_history:
                     with price_chart_placeholder.container():
                         fig = create_price_chart(price_history, alt_index)
-                        st.plotly_chart(fig, use_container_width=True, key="price_chart")
+                        st.plotly_chart(fig, use_container_width=True, key=f"price_chart_{int(time.time())}")
                 
                 # Futures premium chart
                 with futures_premium_placeholder.container():
                     fig = create_futures_premium_chart(futures_premiums)
-                    st.plotly_chart(fig, use_container_width=True, key="futures_premium_chart")
+                    st.plotly_chart(fig, use_container_width=True, key=f"futures_premium_chart_{int(time.time())}")
                 
                 # Volume chart
                 with volume_chart_placeholder.container():
                     fig = create_volume_chart(volume_data)
-                    st.plotly_chart(fig, use_container_width=True, key="volume_chart")
+                    st.plotly_chart(fig, use_container_width=True, key=f"volume_chart_{int(time.time())}")
                 
                 # High-frequency volatility chart
                 with hf_volatility_placeholder.container():
                     fig = create_hf_volatility_chart(hf_volatility)
-                    st.plotly_chart(fig, use_container_width=True, key="hf_volatility_chart")
+                    st.plotly_chart(fig, use_container_width=True, key=f"hf_volatility_chart_{int(time.time())}")
                 
                 # Momentum analysis for KPIs tab
                 momentum_data = trends_fetcher.calculate_trend_momentum(trends_df)
+                
+                # Check for significant trend changes and send alerts
+                for keyword, data in momentum_data.items():
+                    if abs(data['change_24h']) > 50:  # Alert on >50% change
+                        notification_service.send_trend_alert(
+                            keyword=keyword,
+                            current_value=data['current'],
+                            change_pct=data['change_24h']
+                        )
+                
                 with momentum_placeholder.container():
                     momentum_df = pd.DataFrame(momentum_data).T
                     
@@ -476,6 +518,14 @@ def main():
                                 # Calculate metrics
                                 change_7d = ((current_price - start_price) / start_price) * 100
                                 volatility = ((max_price - min_price) / avg_price) * 100
+                                
+                                # Send price alert for significant changes
+                                if abs(change_7d) > 5:  # Alert on >5% 7-day change
+                                    notification_service.send_price_alert(
+                                        symbol=symbol.replace('-USD', ''),
+                                        current_price=current_price,
+                                        change_pct=change_7d
+                                    )
                                 
                                 # Determine trend direction
                                 recent_trend = df['price'].tail(24)  # Last 24 hours

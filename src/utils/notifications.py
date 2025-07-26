@@ -185,6 +185,102 @@ class NotificationService:
                 tag=f"price_{symbol.lower().replace('-', '_')}"
             )
     
+    def send_statistical_breakout_alert(self, breakout_event):
+        """Send a statistical breakout alert notification"""
+        from src.utils.statistical_alerts import BreakoutEvent
+        
+        if not isinstance(breakout_event, BreakoutEvent):
+            return
+        
+        # Format chart type for display
+        chart_display = {
+            'trends': '📊 Search Trends',
+            'prices': '💰 Prices',
+            'futures_premiums': '📈 Futures Premium',
+            'volume': '📦 Volume',
+            'hf_volatility': '⚡ HF Volatility'
+        }.get(breakout_event.chart_type, breakout_event.chart_type.title())
+        
+        # Direction emoji
+        direction_emoji = "📈" if breakout_event.direction == 'above' else "📉"
+        
+        # Format the title
+        title = f"🚨 {direction_emoji} Statistical Breakout"
+        
+        # Format the body with statistical details
+        sigma_text = f"{breakout_event.sigma_level:.1f}σ"
+        confidence_text = f"{breakout_event.confidence:.0f}%"
+        
+        if breakout_event.chart_type == 'prices':
+            value_text = f"${breakout_event.current_value:,.2f}"
+            expected_text = f"${breakout_event.expected_value:,.2f}"
+        elif breakout_event.chart_type == 'futures_premiums':
+            value_text = f"{breakout_event.current_value:+.2f}%"
+            expected_text = f"{breakout_event.expected_value:+.2f}%"
+        else:
+            value_text = f"{breakout_event.current_value:.1f}"
+            expected_text = f"{breakout_event.expected_value:.1f}"
+        
+        body = f"{chart_display}: {breakout_event.series_name}\n{sigma_text} {breakout_event.direction} trend ({confidence_text} confidence)\nActual: {value_text} | Expected: {expected_text}"
+        
+        self.send_browser_notification(
+            title=title,
+            body=body,
+            tag=f"statistical_{breakout_event.chart_type}_{breakout_event.series_name.lower().replace(' ', '_').replace('-', '_')}",
+            duration=8000  # Longer duration for important statistical alerts
+        )
+    
+    def send_regression_anomaly_alert(self, series_name: str, chart_type: str, anomaly_details: dict):
+        """Send a regression anomaly alert for significant statistical deviations"""
+        chart_display = {
+            'trends': '📊',
+            'prices': '💰',
+            'futures_premiums': '📈',
+            'volume': '📦',
+            'hf_volatility': '⚡'
+        }.get(chart_type, '📈')
+        
+        title = f"⚠️ {chart_display} Regression Anomaly"
+        
+        r_squared = anomaly_details.get('r_squared', 0) * 100
+        normalized_rmse = anomaly_details.get('normalized_rmse', 0) * 100
+        
+        body = f"{series_name} showing unusual pattern\nR² = {r_squared:.1f}% | RMSE = {normalized_rmse:.1f}%\nTrend reliability compromised"
+        
+        self.send_browser_notification(
+            title=title,
+            body=body,
+            tag=f"anomaly_{chart_type}_{series_name.lower().replace(' ', '_').replace('-', '_')}"
+        )
+    
+    def send_multiple_breakouts_alert(self, breakouts: list):
+        """Send alert when multiple statistical breakouts occur simultaneously"""
+        if len(breakouts) < 2:
+            return
+        
+        title = f"🚨 Multiple Breakouts Detected ({len(breakouts)})"
+        
+        # Summarize the breakouts
+        chart_types = set(b.chart_type for b in breakouts)
+        chart_summary = ", ".join([
+            {
+                'trends': 'Trends',
+                'prices': 'Prices', 
+                'futures_premiums': 'Futures',
+                'volume': 'Volume',
+                'hf_volatility': 'Volatility'
+            }.get(ct, ct.title()) for ct in chart_types
+        ])
+        
+        body = f"Simultaneous breakouts across: {chart_summary}\nThis may indicate significant market movement"
+        
+        self.send_browser_notification(
+            title=title,
+            body=body,
+            tag="multiple_breakouts",
+            duration=10000  # Even longer for multiple breakouts
+        )
+    
     def send_test_notification(self):
         """Send a test notification to verify the system is working"""
         current_time = datetime.now().strftime("%H:%M:%S")

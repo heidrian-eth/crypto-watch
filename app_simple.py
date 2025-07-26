@@ -8,6 +8,7 @@ from src.data.trends_fetcher import TrendsDataFetcher
 from src.data.binance_fetcher import BinanceFetcher
 from src.utils.config import Config
 from src.utils.notifications import notification_service
+from src.utils.statistical_alerts import statistical_analyzer
 
 # Suppress FutureWarning from pytrends
 warnings.filterwarnings('ignore', category=FutureWarning, module='pytrends')
@@ -277,12 +278,37 @@ def main():
                 notification_service.request_permission()
                 st.info("Check your browser for notification permission request")
             
+            # Statistical alerts configuration
+            st.markdown("**📊 Statistical Alerts**")
+            statistical_alerts_enabled = st.checkbox("Enable Statistical Breakout Alerts", value=True)
+            
+            if statistical_alerts_enabled:
+                statistical_analyzer.enable()
+                
+                # Sigma threshold configuration
+                sigma_threshold = st.slider(
+                    "Sigma Threshold", 
+                    min_value=1.0, 
+                    max_value=4.0, 
+                    value=2.0, 
+                    step=0.1,
+                    help="Number of standard deviations for breakout detection"
+                )
+                statistical_analyzer.set_sigma_threshold(sigma_threshold)
+                
+                # Display current settings
+                st.caption(f"🎯 Alert when data crosses {sigma_threshold}σ boundary")
+                
+            else:
+                statistical_analyzer.disable()
+            
             # Test notification button
             if st.button("🧪 Test Notification"):
                 notification_service.send_test_notification()
                 st.success("Test notification sent!")
         else:
             notification_service.disable()
+            statistical_analyzer.disable()
         
         st.markdown("---")
         st.markdown("### 📊 Tracked Keywords")
@@ -397,18 +423,6 @@ def main():
     
     while True:
         try:
-            # Alert detection system - trigger every 5 minutes
-            current_time = datetime.now()
-            current_minutes = current_time.minute
-            
-            # Check if current minute is divisible by 5 (0, 5, 10, 15, etc.)
-            if current_minutes % 5 == 0:
-                notification_service.send_browser_notification(
-                    title="🔔 Crypto Dashboard Alert",
-                    body=f"Periodic alert triggered at {current_time.strftime('%H:%M')} - Dashboard refreshing every 5 minutes",
-                    tag="periodic_alert"
-                )
-            
             # Fetch trends data
             trends_df = trends_fetcher.get_trends_data(Config.TREND_KEYWORDS)
             
@@ -424,6 +438,29 @@ def main():
             
             # Get high-frequency volatility data
             hf_volatility = get_hf_volatility()
+            
+            # Perform statistical analysis for breakout detection
+            if notification_service.is_notification_enabled():
+                try:
+                    breakouts = statistical_analyzer.analyze_all_series(
+                        trends_df=trends_df,
+                        price_history=price_history,
+                        alt_index=alt_index,
+                        futures_premiums=futures_premiums,
+                        volume_data=volume_data,
+                        hf_volatility=hf_volatility
+                    )
+                    
+                    # Send individual breakout alerts
+                    for breakout in breakouts:
+                        notification_service.send_statistical_breakout_alert(breakout)
+                    
+                    # Send multiple breakout alert if many occurred simultaneously
+                    if len(breakouts) >= 3:  # Alert if 3+ breakouts occur together
+                        notification_service.send_multiple_breakouts_alert(breakouts)
+                        
+                except Exception as e:
+                    print(f"Error in statistical analysis: {e}")
             
             if not trends_df.empty:
                 # Main trends chart

@@ -200,6 +200,7 @@ class StatisticalAlertAnalyzer:
                           trends_df: pd.DataFrame,
                           price_history: Dict[str, pd.DataFrame],
                           alt_index: pd.DataFrame,
+                          trends_alt_index: pd.Series,
                           futures_premiums: pd.DataFrame,
                           volume_data: pd.DataFrame,
                           hf_volatility: pd.DataFrame) -> List[BreakoutEvent]:
@@ -240,17 +241,29 @@ class StatisticalAlertAnalyzer:
                 except Exception as e:
                     print(f"Error analyzing prices for {symbol}: {e}")
         
-        # Analyze alt index
+        # Analyze alt index (price-based)
         if not alt_index.empty and 'price' in alt_index.columns:
             try:
                 breakouts = self.detect_sigma_breakouts(
                     alt_index['price'], 
-                    'Alt Index', 
+                    'Price Alt Index', 
                     'prices'
                 )
                 all_breakouts.extend(breakouts)
             except Exception as e:
-                print(f"Error analyzing alt index: {e}")
+                print(f"Error analyzing price alt index: {e}")
+        
+        # Analyze trends alt index
+        if trends_alt_index is not None and not trends_alt_index.empty:
+            try:
+                breakouts = self.detect_sigma_breakouts(
+                    trends_alt_index, 
+                    'Trends Alt Index', 
+                    'trends'
+                )
+                all_breakouts.extend(breakouts)
+            except Exception as e:
+                print(f"Error analyzing trends alt index: {e}")
         
         # Analyze futures premiums
         if not futures_premiums.empty:

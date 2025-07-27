@@ -86,6 +86,45 @@ class TrendsDataFetcher:
             print(f"Error fetching related queries: {e}")
             return {}
     
+    def get_multiple_trends_data(self, keyword_batches: List[List[str]], timeframe: str = 'now 7-d') -> pd.DataFrame:
+        """Fetch trends data for multiple batches of keywords and combine them"""
+        combined_df = pd.DataFrame()
+        
+        for i, keywords in enumerate(keyword_batches):
+            if not keywords:
+                continue
+                
+            batch_df = self.get_trends_data(keywords, timeframe)
+            if not batch_df.empty:
+                if combined_df.empty:
+                    combined_df = batch_df
+                else:
+                    # Merge on datetime index
+                    combined_df = combined_df.join(batch_df, how='outer')
+                
+                # Add small delay between requests to avoid rate limiting
+                if i < len(keyword_batches) - 1:
+                    time.sleep(2)
+        
+        return combined_df.fillna(0)
+    
+    def calculate_trends_alt_index(self, trends_df: pd.DataFrame, exclude_columns: List[str] = None) -> pd.Series:
+        """Calculate an Alt Index from Google Trends data, similar to price Alt Index"""
+        if trends_df.empty:
+            return pd.Series()
+        
+        # Exclude non-crypto columns (like 'Cryptocurrency' which is too general)
+        exclude_columns = exclude_columns or ['Cryptocurrency']
+        crypto_columns = [col for col in trends_df.columns if col not in exclude_columns]
+        
+        if not crypto_columns:
+            return pd.Series()
+        
+        # Create equal-weighted index (could be enhanced with market cap weighting)
+        alt_index = trends_df[crypto_columns].mean(axis=1)
+        
+        return alt_index
+    
     def calculate_trend_momentum(self, trends_df: pd.DataFrame) -> Dict[str, Dict]:
         if trends_df.empty:
             return {}

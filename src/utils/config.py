@@ -1,13 +1,13 @@
 import os
 from typing import Dict, List
 from dotenv import load_dotenv
+import streamlit as st
 
 load_dotenv()
 
 class Config:
-    COINGECKO_API_KEY = os.getenv('COINGECKO_API_KEY', '')
-    BINANCE_API_KEY = os.getenv('BINANCE_API_KEY', '')
-    BINANCE_API_SECRET = os.getenv('BINANCE_API_SECRET', '')
+    BINANCE_API_KEY = st.secrets.get('BINANCE_API_KEY', '')
+    BINANCE_API_SECRET = st.secrets.get('BINANCE_API_SECRET', '')
     
     CACHE_DURATION_MINUTES = int(os.getenv('CACHE_DURATION_MINUTES', '5'))
     
@@ -23,14 +23,25 @@ class Config:
     }
     
     # Google Trends API has limits on keywords per request
-    # Keep it to 5 or fewer keywords
-    TREND_KEYWORDS = [
+    # Keep it to 5 or fewer keywords per batch
+    TREND_KEYWORDS_BATCH_1 = [
         'Bitcoin',
         'Ethereum',
         'Cryptocurrency',
-        'Solana',
-        'Cardano'
+        'BNB',
+        'Solana'
     ]
+    
+    TREND_KEYWORDS_BATCH_2 = [
+        'XRP',
+        'Cardano',
+        'Dogecoin',
+        'Polygon',
+        'Chainlink'
+    ]
+    
+    # Legacy support
+    TREND_KEYWORDS = TREND_KEYWORDS_BATCH_1
     
     # COIN-M Futures symbols for premium calculation
     COINM_FUTURES_SYMBOLS = {

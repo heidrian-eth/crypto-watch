@@ -25,12 +25,16 @@ st.set_page_config(
 def init_fetchers_v2():
     return TrendsDataFetcher(), BinanceFetcher()
 
-def create_trends_chart(trends_df: pd.DataFrame, normalize=False):
+def create_trends_chart(trends_df: pd.DataFrame, trends_alt_index: pd.Series = None, normalize=False):
     fig = go.Figure()
+    
+    # Only plot Bitcoin, Ethereum, and Cryptocurrency from the trends data
+    key_trends = ['Bitcoin', 'Ethereum', 'Cryptocurrency']
+    filtered_df = trends_df[[col for col in key_trends if col in trends_df.columns]]
     
     # Normalize each trend to its maximum value if requested
     if normalize:
-        normalized_df = trends_df.copy()
+        normalized_df = filtered_df.copy()
         for column in normalized_df.columns:
             max_val = normalized_df[column].max()
             if max_val > 0:
@@ -38,9 +42,10 @@ def create_trends_chart(trends_df: pd.DataFrame, normalize=False):
         data_to_plot = normalized_df
         y_title = "Normalized Interest (% of Peak)"
     else:
-        data_to_plot = trends_df
+        data_to_plot = filtered_df
         y_title = "Search Interest (0-100)"
     
+    # Plot the key trends
     for column in data_to_plot.columns:
         fig.add_trace(go.Scatter(
             x=data_to_plot.index,
@@ -50,8 +55,24 @@ def create_trends_chart(trends_df: pd.DataFrame, normalize=False):
             line=dict(width=2)
         ))
     
+    # Add the Trends Alt Index if provided
+    if trends_alt_index is not None and not trends_alt_index.empty:
+        alt_data = trends_alt_index
+        if normalize:
+            max_val = alt_data.max()
+            if max_val > 0:
+                alt_data = (alt_data / max_val) * 100
+        
+        fig.add_trace(go.Scatter(
+            x=alt_data.index,
+            y=alt_data,
+            mode='lines+markers',
+            name='Trends Alt Index',
+            line=dict(width=3, color='purple', dash='dash')
+        ))
+    
     fig.update_layout(
-        title="Google Trends Interest Over Time (7 Days, Hourly, Normalized)",
+        title="Google Trends: Key Cryptos + Alt Index (7 Days, Hourly, Normalized)",
         xaxis_title="Date",
         yaxis_title=y_title,
         height=600,
@@ -424,7 +445,16 @@ def main():
     while True:
         try:
             # Fetch trends data
-            trends_df = trends_fetcher.get_trends_data(Config.TREND_KEYWORDS)
+            # Fetch Google Trends data with multiple batches to get all cryptos
+            trends_df = trends_fetcher.get_multiple_trends_data([
+                Config.TREND_KEYWORDS_BATCH_1,
+                Config.TREND_KEYWORDS_BATCH_2
+            ])
+            
+            # Calculate Trends Alt Index
+            trends_alt_index = pd.Series()
+            if not trends_df.empty:
+                trends_alt_index = trends_fetcher.calculate_trends_alt_index(trends_df)
             
             # Get price data
             price_history = get_price_history()
@@ -446,6 +476,7 @@ def main():
                         trends_df=trends_df,
                         price_history=price_history,
                         alt_index=alt_index,
+                        trends_alt_index=trends_alt_index,
                         futures_premiums=futures_premiums,
                         volume_data=volume_data,
                         hf_volatility=hf_volatility
@@ -465,7 +496,7 @@ def main():
             if not trends_df.empty:
                 # Main trends chart
                 with trends_chart_placeholder.container():
-                    fig = create_trends_chart(trends_df, normalize=True)
+                    fig = create_trends_chart(trends_df, trends_alt_index, normalize=True)
                     st.plotly_chart(fig, use_container_width=True, key=f"trends_chart_{int(time.time())}")
                 
                 # Price chart

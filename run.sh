@@ -26,11 +26,10 @@ if ! python -c "import streamlit" &> /dev/null; then
     pip install -r requirements.txt
 fi
 
-# Check if .env file exists
-if [ ! -f ".env" ] && [ -f ".env.example" ]; then
-    echo "📋 Creating .env file from template..."
-    cp .env.example .env
-    echo "ℹ️  You can add your API keys to .env file for enhanced features"
+# Check if Streamlit secrets file exists
+if [ ! -f ".streamlit/secrets.toml" ]; then
+    echo "⚠️  No .streamlit/secrets.toml file found"
+    echo "ℹ️  Add your Binance API keys to .streamlit/secrets.toml for enhanced features"
 fi
 
 # Run the Streamlit app

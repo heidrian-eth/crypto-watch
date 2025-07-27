@@ -284,6 +284,21 @@ def main():
     with st.sidebar:
         st.header("⚙️ Settings")
         
+        # Debug section for API configuration
+        with st.expander("🔧 Debug Info"):
+            st.write("**API Configuration Status:**")
+            if 'BINANCE_API_KEY' in st.secrets:
+                key = st.secrets['BINANCE_API_KEY']
+                st.success(f"✓ API Key: {key[:2]}...{key[-2:]}")
+            else:
+                st.error("✗ API Key not found in secrets")
+            
+            if 'BINANCE_API_SECRET' in st.secrets:
+                secret = st.secrets['BINANCE_API_SECRET']
+                st.success(f"✓ API Secret: {secret[:2]}...{secret[-2:]}")
+            else:
+                st.error("✗ API Secret not found in secrets")
+        
         auto_refresh = st.checkbox("Auto-refresh", value=True)
         refresh_interval = st.slider("Refresh interval (minutes)", 1, 5, 5) * 60  # Convert to seconds
         

@@ -9,7 +9,7 @@ from src.utils.config import Config
 
 class BinanceFetcher:
     def __init__(self):
-        self.base_url = "https://api.binance.com/api/v3"
+        self.base_url = "https://data.binance.com/api/v3"
         self.dapi_url = "https://dapi.binance.com/dapi/v1"  # COIN-M futures API
         self.api_key = Config.BINANCE_API_KEY
         self.api_secret = Config.BINANCE_API_SECRET

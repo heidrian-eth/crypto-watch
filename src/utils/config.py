@@ -9,7 +9,7 @@ class Config:
     BINANCE_API_KEY = st.secrets.get('BINANCE_API_KEY', '')
     BINANCE_API_SECRET = st.secrets.get('BINANCE_API_SECRET', '')
     
-    CACHE_DURATION_MINUTES = int(os.getenv('CACHE_DURATION_MINUTES', '5'))
+    CACHE_DURATION_MINUTES = int(os.getenv('CACHE_DURATION_MINUTES', '1'))
     
     CRYPTO_SYMBOLS = {
         'BTC': 'bitcoin',

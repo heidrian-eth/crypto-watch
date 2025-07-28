@@ -6,8 +6,14 @@ import streamlit as st
 load_dotenv()
 
 class Config:
-    BINANCE_API_KEY = st.secrets.get('BINANCE_API_KEY', '')
-    BINANCE_API_SECRET = st.secrets.get('BINANCE_API_SECRET', '')
+    # Try Streamlit secrets first, then fall back to environment variables
+    try:
+        BINANCE_API_KEY = st.secrets.get('BINANCE_API_KEY', os.getenv('BINANCE_API_KEY', ''))
+        BINANCE_API_SECRET = st.secrets.get('BINANCE_API_SECRET', os.getenv('BINANCE_API_SECRET', ''))
+    except:
+        # If st.secrets is not available (e.g., running outside Streamlit)
+        BINANCE_API_KEY = os.getenv('BINANCE_API_KEY', '')
+        BINANCE_API_SECRET = os.getenv('BINANCE_API_SECRET', '')
     
     # Binance API URLs
     BINANCE_BASE_URL = os.getenv('BINANCE_BASE_URL', 'https://api.binance.com/api/v3')

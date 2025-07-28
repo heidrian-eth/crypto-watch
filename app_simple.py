@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 from datetime import datetime
 import time
 import warnings
+import os
 from src.data.trends_fetcher import TrendsDataFetcher
 from src.data.binance_fetcher import BinanceFetcher
 from src.utils.config import Config
@@ -290,17 +291,46 @@ def main():
         # Debug section for API configuration
         with st.expander("🔧 Debug Info & Configuration"):
             st.write("**API Configuration Status:**")
-            if 'BINANCE_API_KEY' in st.secrets:
-                key = st.secrets['BINANCE_API_KEY']
-                st.success(f"✓ API Key: {key[:2]}...{key[-2:]}")
-            else:
-                st.error("✗ API Key not found in secrets")
             
-            if 'BINANCE_API_SECRET' in st.secrets:
-                secret = st.secrets['BINANCE_API_SECRET']
-                st.success(f"✓ API Secret: {secret[:2]}...{secret[-2:]}")
-            else:
-                st.error("✗ API Secret not found in secrets")
+            # Check API Key source
+            key_from_secrets = False
+            key_from_env = False
+            
+            try:
+                if 'BINANCE_API_KEY' in st.secrets:
+                    key = st.secrets['BINANCE_API_KEY']
+                    key_from_secrets = True
+                    st.success(f"✓ API Key from Streamlit secrets: {key[:2]}...{key[-2:]}")
+                elif os.getenv('BINANCE_API_KEY'):
+                    key = os.getenv('BINANCE_API_KEY')
+                    key_from_env = True
+                    st.success(f"✓ API Key from environment: {key[:2]}...{key[-2:]}")
+                else:
+                    st.error("✗ API Key not found in secrets or environment")
+            except:
+                if os.getenv('BINANCE_API_KEY'):
+                    key = os.getenv('BINANCE_API_KEY')
+                    key_from_env = True
+                    st.success(f"✓ API Key from environment: {key[:2]}...{key[-2:]}")
+                else:
+                    st.error("✗ API Key not found in environment")
+            
+            # Check API Secret source
+            try:
+                if 'BINANCE_API_SECRET' in st.secrets:
+                    secret = st.secrets['BINANCE_API_SECRET']
+                    st.success(f"✓ API Secret from Streamlit secrets: {secret[:2]}...{secret[-2:]}")
+                elif os.getenv('BINANCE_API_SECRET'):
+                    secret = os.getenv('BINANCE_API_SECRET')
+                    st.success(f"✓ API Secret from environment: {secret[:2]}...{secret[-2:]}")
+                else:
+                    st.error("✗ API Secret not found in secrets or environment")
+            except:
+                if os.getenv('BINANCE_API_SECRET'):
+                    secret = os.getenv('BINANCE_API_SECRET')
+                    st.success(f"✓ API Secret from environment: {secret[:2]}...{secret[-2:]}")
+                else:
+                    st.error("✗ API Secret not found in environment")
             
             st.markdown("---")
             st.write("**API URLs:**")

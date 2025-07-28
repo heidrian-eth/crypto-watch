@@ -19,7 +19,8 @@ class Config:
     BINANCE_BASE_URL = os.getenv('BINANCE_BASE_URL', 'https://api.binance.com/api/v3')
     BINANCE_FUTURES_URL = os.getenv('BINANCE_FUTURES_URL', 'https://dapi.binance.com/dapi/v1')
     
-    CACHE_DURATION_MINUTES = int(os.getenv('CACHE_DURATION_MINUTES', '1'))
+    CACHE_DURATION_MINUTES = int(os.getenv('CACHE_DURATION_MINUTES', '5'))  # Changed default to 5 minutes
+    CACHE_TTL_SECONDS = CACHE_DURATION_MINUTES * 60  # Cache TTL in seconds for Streamlit
     
     CRYPTO_SYMBOLS = {
         'BTC': 'bitcoin',

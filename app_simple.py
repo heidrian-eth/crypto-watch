@@ -22,8 +22,17 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Create global cached instances for cache sharing across users
+@st.cache_resource
+def get_trends_fetcher():
+    return TrendsDataFetcher()
+
+@st.cache_resource  
+def get_binance_fetcher():
+    return BinanceFetcher()
+
 def init_fetchers_v2():
-    return TrendsDataFetcher(), BinanceFetcher()
+    return get_trends_fetcher(), get_binance_fetcher()
 
 def create_trends_chart(trends_df: pd.DataFrame, trends_alt_index: pd.Series = None, normalize=False):
     fig = go.Figure()
@@ -287,7 +296,7 @@ def main():
         
         
         auto_refresh = st.checkbox("Auto-refresh", value=True)
-        refresh_interval = st.slider("Refresh interval (minutes)", 1, 5, 5) * 60  # Convert to seconds
+        refresh_interval = st.slider("Refresh interval (minutes)", 5, 30, 5, step=5) * 60  # Convert to seconds
         
         st.markdown("---")
         st.markdown("### 🔔 Notifications")
@@ -398,7 +407,7 @@ def main():
         volume_metrics_placeholder = st.empty()
     
     # Load historical price data from Binance
-    @st.cache_data(ttl=60)  # Cache for 1 minute
+    @st.cache_data(ttl=Config.CACHE_TTL_SECONDS)
     def get_price_history():
         if Config.BINANCE_API_KEY:
             # Get BTC and ETH for main display
@@ -412,7 +421,7 @@ def main():
             return {}
     
     # Calculate Alt Index (excluding BTC and ETH)
-    @st.cache_data(ttl=60)  # Cache for 1 minute
+    @st.cache_data(ttl=Config.CACHE_TTL_SECONDS)
     def get_alt_index(price_history):
         if price_history:
             # Filter out BTC and ETH for Alt Index
@@ -421,7 +430,7 @@ def main():
         return pd.DataFrame()
     
     # Get futures premiums
-    @st.cache_data(ttl=60)  # Cache for 1 minute
+    @st.cache_data(ttl=Config.CACHE_TTL_SECONDS)
     def get_futures_premiums():
         if Config.BINANCE_API_KEY:
             return binance_fetcher.calculate_futures_premiums(days=7)
@@ -429,7 +438,7 @@ def main():
             return pd.DataFrame()
     
     # Get volume data
-    @st.cache_data(ttl=60)  # Cache for 1 minute
+    @st.cache_data(ttl=Config.CACHE_TTL_SECONDS)
     def get_volume_data():
         if Config.BINANCE_API_KEY:
             return binance_fetcher.calculate_volume_data(days=7)
@@ -437,7 +446,7 @@ def main():
             return pd.DataFrame()
     
     # Get high-frequency volatility data
-    @st.cache_data(ttl=60)  # Cache for 1 minute
+    @st.cache_data(ttl=Config.CACHE_TTL_SECONDS)
     def get_hf_volatility():
         if Config.BINANCE_API_KEY:
             return binance_fetcher.calculate_high_freq_volatility(days=7)
@@ -448,7 +457,7 @@ def main():
         try:
             # Fetch trends data
             # Fetch Google Trends data with multiple batches to get all cryptos
-            @st.cache_data(ttl=60)  # Cache for 1 minute
+            @st.cache_data(ttl=Config.CACHE_TTL_SECONDS)
             def get_trends_data():
                 return trends_fetcher.get_multiple_trends_data([
                     Config.TREND_KEYWORDS_BATCH_1,
@@ -527,7 +536,7 @@ def main():
                     st.plotly_chart(fig, use_container_width=True, key=f"hf_volatility_chart_{int(time.time())}")
                 
                 # Momentum analysis for KPIs tab
-                @st.cache_data(ttl=60)  # Cache for 1 minute
+                @st.cache_data(ttl=Config.CACHE_TTL_SECONDS)
                 def get_momentum_data(df):
                     return trends_fetcher.calculate_trend_momentum(df)
                 

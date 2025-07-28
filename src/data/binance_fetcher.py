@@ -6,6 +6,7 @@ from typing import Dict, List, Optional
 import hmac
 import hashlib
 from src.utils.config import Config
+import streamlit as st
 
 class BinanceFetcher:
     def __init__(self, base_url=None, futures_url=None):
@@ -13,34 +14,16 @@ class BinanceFetcher:
         self.dapi_url = futures_url or Config.BINANCE_FUTURES_URL  # COIN-M futures API
         self.api_key = Config.BINANCE_API_KEY
         self.api_secret = Config.BINANCE_API_SECRET
-        self._cache = {}
-        self._cache_timestamps = {}
     
-    def _get_from_cache(self, key: str, ttl_minutes: int = 5) -> Optional[any]:
-        if key not in self._cache_timestamps:
-            return None
-        cache_age = time.time() - self._cache_timestamps[key]
-        if cache_age < (ttl_minutes * 60):
-            return self._cache[key]
-        return None
-    
-    def _save_to_cache(self, key: str, data: any):
-        self._cache[key] = data
-        self._cache_timestamps[key] = time.time()
-    
-    def get_klines(self, symbol: str, interval: str = '1h', days: int = 7) -> pd.DataFrame:
+    @st.cache_data(ttl=Config.CACHE_TTL_SECONDS)
+    def get_klines(_self, symbol: str, interval: str = '1h', days: int = 7) -> pd.DataFrame:
         """Get historical kline/candlestick data from Binance"""
-        cache_key = f"klines_{symbol}_{interval}_{days}"
-        cached_data = self._get_from_cache(cache_key, ttl_minutes=15)  # Cache for 15 minutes
-        if cached_data is not None:
-            return cached_data
-        
         try:
             # Calculate start time (7 days ago)
             end_time = int(datetime.now().timestamp() * 1000)
             start_time = end_time - (days * 24 * 60 * 60 * 1000)  # 7 days in milliseconds
             
-            url = f"{self.base_url}/klines"
+            url = f"{_self.base_url}/klines"
             params = {
                 'symbol': symbol,
                 'interval': interval,
@@ -75,7 +58,6 @@ class BinanceFetcher:
                 # Keep only the columns we need
                 df = df[['price', 'open', 'high', 'low', 'volume']]
                 
-                self._save_to_cache(cache_key, df)
                 return df
             else:
                 print(f"Error fetching {symbol}: {response.status_code} - {response.text}")
@@ -85,7 +67,8 @@ class BinanceFetcher:
             print(f"Error fetching klines for {symbol}: {e}")
             return pd.DataFrame()
     
-    def get_multiple_symbols_historical(self, symbols: List[str], days: int = 7) -> Dict[str, pd.DataFrame]:
+    @st.cache_data(ttl=Config.CACHE_TTL_SECONDS)
+    def get_multiple_symbols_historical(_self, symbols: List[str], days: int = 7) -> Dict[str, pd.DataFrame]:
         """Get historical data for multiple symbols"""
         result = {}
         
@@ -105,7 +88,7 @@ class BinanceFetcher:
         
         for symbol in symbols:
             binance_symbol = binance_symbols.get(symbol, symbol.replace('-USD', 'USDT'))
-            df = self.get_klines(binance_symbol, interval='1h', days=days)
+            df = _self.get_klines(binance_symbol, interval='1h', days=days)
             if not df.empty:
                 result[symbol] = df
             # Small delay to respect rate limits
@@ -113,15 +96,11 @@ class BinanceFetcher:
         
         return result
     
-    def get_current_prices(self, symbols: List[str]) -> Dict[str, float]:
+    @st.cache_data(ttl=Config.CACHE_TTL_SECONDS)
+    def get_current_prices(_self, symbols: List[str]) -> Dict[str, float]:
         """Get current prices for symbols"""
-        cache_key = f"current_prices_{'_'.join(symbols)}"
-        cached_data = self._get_from_cache(cache_key, ttl_minutes=1)  # Cache for 1 minute
-        if cached_data is not None:
-            return cached_data
-        
         try:
-            url = f"{self.base_url}/ticker/price"
+            url = f"{_self.base_url}/ticker/price"
             response = requests.get(url, timeout=10)
             
             if response.status_code == 200:
@@ -150,7 +129,6 @@ class BinanceFetcher:
                     if binance_symbol in price_lookup:
                         result[symbol] = price_lookup[binance_symbol]
                 
-                self._save_to_cache(cache_key, result)
                 return result
             else:
                 print(f"Error fetching current prices: {response.status_code}")
@@ -160,7 +138,7 @@ class BinanceFetcher:
             print(f"Error fetching current prices: {e}")
             return {}
     
-    def calculate_weighted_index(self, historical_data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+    def calculate_weighted_index(_self, historical_data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
         """Calculate weighted index from historical data"""
         if not historical_data:
             return pd.DataFrame()
@@ -199,13 +177,9 @@ class BinanceFetcher:
         
         return pd.DataFrame({'price': weighted_prices}, index=all_timestamps)
     
-    def get_24hr_ticker_stats(self, symbols: List[str]) -> Dict[str, Dict]:
+    @st.cache_data(ttl=Config.CACHE_TTL_SECONDS)
+    def get_24hr_ticker_stats(_self, symbols: List[str]) -> Dict[str, Dict]:
         """Get 24hr ticker statistics including volume data"""
-        cache_key = f"ticker_stats_{'_'.join(symbols)}"
-        cached_data = self._get_from_cache(cache_key, ttl_minutes=5)
-        if cached_data is not None:
-            return cached_data
-        
         try:
             # Map our symbols to Binance format
             binance_symbols = []
@@ -213,7 +187,7 @@ class BinanceFetcher:
                 binance_symbol = symbol.replace('-USD', 'USDT')
                 binance_symbols.append(binance_symbol)
             
-            url = f"{self.base_url}/ticker/24hr"
+            url = f"{_self.base_url}/ticker/24hr"
             params = {'symbols': str(binance_symbols).replace("'", '"')}
             
             response = requests.get(url, params=params, timeout=10)
@@ -237,7 +211,6 @@ class BinanceFetcher:
                             'lowPrice': float(item['lowPrice'])
                         }
                 
-                self._save_to_cache(cache_key, result)
                 return result
             else:
                 print(f"Error fetching 24hr ticker stats: {response.status_code}")
@@ -247,7 +220,8 @@ class BinanceFetcher:
             print(f"Error fetching 24hr ticker stats: {e}")
             return {}
     
-    def calculate_volume_data(self, days: int = 7) -> pd.DataFrame:
+    @st.cache_data(ttl=Config.CACHE_TTL_SECONDS)
+    def calculate_volume_data(_self, days: int = 7) -> pd.DataFrame:
         """Calculate volume data for BTC, ETH, Alt Index, and COIN-M futures"""
         try:
             volume_data = {}
@@ -257,7 +231,7 @@ class BinanceFetcher:
             alt_symbols = ['BNB-USD', 'SOL-USD', 'XRP-USD', 'ADA-USD', 'DOGE-USD', 'MATIC-USD', 'AVAX-USD', 'DOT-USD']
             all_spot_symbols = main_symbols + alt_symbols
             
-            spot_data = self.get_multiple_symbols_historical(all_spot_symbols, days=days)
+            spot_data = _self.get_multiple_symbols_historical(all_spot_symbols, days=days)
             
             # Process BTC and ETH spot volume
             for symbol in main_symbols:
@@ -266,14 +240,14 @@ class BinanceFetcher:
             
             # Calculate Alt Index weighted volume
             if len([s for s in alt_symbols if s in spot_data]) > 0:
-                alt_volume_series = self.calculate_alt_weighted_volume(spot_data, alt_symbols)
+                alt_volume_series = _self.calculate_alt_weighted_volume(spot_data, alt_symbols)
                 if not alt_volume_series.empty:
                     volume_data['Alt Index'] = alt_volume_series
             
             # Get COIN-M futures volume data
             for asset in ['BTC', 'ETH']:
                 for symbol in Config.COINM_FUTURES_SYMBOLS[asset]:
-                    futures_df = self.get_coinm_klines(symbol, interval='1h', days=days)
+                    futures_df = _self.get_coinm_klines(symbol, interval='1h', days=days)
                     if not futures_df.empty and 'volume' in futures_df.columns:
                         display_name = Config.FUTURES_DISPLAY_NAMES.get(symbol, symbol)
                         volume_data[display_name] = futures_df['volume']
@@ -288,7 +262,7 @@ class BinanceFetcher:
             print(f"Error calculating volume data: {e}")
             return pd.DataFrame()
     
-    def calculate_alt_weighted_volume(self, spot_data: Dict[str, pd.DataFrame], alt_symbols: List[str]) -> pd.Series:
+    def calculate_alt_weighted_volume(_self, spot_data: Dict[str, pd.DataFrame], alt_symbols: List[str]) -> pd.Series:
         """Calculate weighted volume for Alt Index using market cap weights"""
         try:
             # Use the same weights as the Alt Index price calculation
@@ -331,13 +305,9 @@ class BinanceFetcher:
             print(f"Error calculating alt weighted volume: {e}")
             return pd.Series()
     
-    def get_5min_klines(self, symbol: str, days: int = 7) -> pd.DataFrame:
+    @st.cache_data(ttl=Config.CACHE_TTL_SECONDS)
+    def get_5min_klines(_self, symbol: str, days: int = 7) -> pd.DataFrame:
         """Get 5-minute kline data for high-frequency volatility analysis"""
-        cache_key = f"5min_klines_{symbol}_{days}"
-        cached_data = self._get_from_cache(cache_key, ttl_minutes=15)
-        if cached_data is not None:
-            return cached_data
-        
         try:
             # Calculate total datapoints needed
             total_points = days * 24 * 12  # 5-min intervals
@@ -351,7 +321,7 @@ class BinanceFetcher:
                 remaining_points = total_points - len(all_data)
                 current_limit = min(limit_per_request, remaining_points)
                 
-                url = f"{self.base_url}/klines"
+                url = f"{_self.base_url}/klines"
                 params = {
                     'symbol': symbol,
                     'interval': '5m',
@@ -405,7 +375,6 @@ class BinanceFetcher:
                 cutoff_time = df.index.max() - pd.Timedelta(days=days)
                 df = df[df.index >= cutoff_time]
                 
-                self._save_to_cache(cache_key, df)
                 return df
             else:
                 print(f"No 5-min klines data received for {symbol}")
@@ -415,7 +384,8 @@ class BinanceFetcher:
             print(f"Error fetching 5-min klines for {symbol}: {e}")
             return pd.DataFrame()
     
-    def calculate_high_freq_volatility(self, days: int = 7) -> pd.DataFrame:
+    @st.cache_data(ttl=Config.CACHE_TTL_SECONDS)
+    def calculate_high_freq_volatility(_self, days: int = 7) -> pd.DataFrame:
         """Calculate high-frequency volatility using 5-min data and hourly LMS regression"""
         try:
             import numpy as np
@@ -427,7 +397,7 @@ class BinanceFetcher:
             symbols = {'BTCUSDT': 'BTC', 'ETHUSDT': 'ETH'}
             
             for binance_symbol, display_name in symbols.items():
-                df_5min = self.get_5min_klines(binance_symbol, days=days)
+                df_5min = _self.get_5min_klines(binance_symbol, days=days)
                 
                 if df_5min.empty:
                     continue
@@ -481,21 +451,15 @@ class BinanceFetcher:
             print(f"Error calculating high-frequency volatility: {e}")
             return pd.DataFrame()
     
-    def get_coinm_exchange_info(self) -> Dict:
+    @st.cache_data(ttl=Config.CACHE_TTL_SECONDS)
+    def get_coinm_exchange_info(_self) -> Dict:
         """Get COIN-M futures exchange info to find available contracts"""
-        cache_key = "coinm_exchange_info"
-        cached_data = self._get_from_cache(cache_key, ttl_minutes=60)  # Cache for 1 hour
-        if cached_data is not None:
-            return cached_data
-        
         try:
-            url = f"{self.dapi_url}/exchangeInfo"
+            url = f"{_self.dapi_url}/exchangeInfo"
             response = requests.get(url, timeout=10)
             
             if response.status_code == 200:
-                data = response.json()
-                self._save_to_cache(cache_key, data)
-                return data
+                return response.json()
             else:
                 print(f"Error fetching COIN-M exchange info: {response.status_code}")
                 return {}
@@ -503,9 +467,10 @@ class BinanceFetcher:
             print(f"Error fetching COIN-M exchange info: {e}")
             return {}
     
-    def get_coinm_futures_symbols(self) -> Dict[str, List[str]]:
+    @st.cache_data(ttl=Config.CACHE_TTL_SECONDS)
+    def get_coinm_futures_symbols(_self) -> Dict[str, List[str]]:
         """Get current COIN-M futures symbols for BTC and ETH quarterly contracts"""
-        exchange_info = self.get_coinm_exchange_info()
+        exchange_info = _self.get_coinm_exchange_info()
         if not exchange_info or 'symbols' not in exchange_info:
             return {'BTC': [], 'ETH': []}
         
@@ -525,19 +490,15 @@ class BinanceFetcher:
         
         return {'BTC': btc_quarterly, 'ETH': eth_quarterly}
     
-    def get_coinm_klines(self, symbol: str, interval: str = '1h', days: int = 7) -> pd.DataFrame:
+    @st.cache_data(ttl=Config.CACHE_TTL_SECONDS)
+    def get_coinm_klines(_self, symbol: str, interval: str = '1h', days: int = 7) -> pd.DataFrame:
         """Get historical kline/candlestick data from COIN-M futures"""
-        cache_key = f"coinm_klines_{symbol}_{interval}_{days}"
-        cached_data = self._get_from_cache(cache_key, ttl_minutes=15)
-        if cached_data is not None:
-            return cached_data
-        
         try:
             # Calculate start time (7 days ago)
             end_time = int(datetime.now().timestamp() * 1000)
             start_time = end_time - (days * 24 * 60 * 60 * 1000)
             
-            url = f"{self.dapi_url}/klines"
+            url = f"{_self.dapi_url}/klines"
             params = {
                 'symbol': symbol,
                 'interval': interval,
@@ -572,7 +533,6 @@ class BinanceFetcher:
                 # Keep only the columns we need
                 df = df[['price', 'open', 'high', 'low', 'volume']]
                 
-                self._save_to_cache(cache_key, df)
                 return df
             else:
                 print(f"Error fetching COIN-M klines for {symbol}: {response.status_code}")
@@ -582,11 +542,12 @@ class BinanceFetcher:
             print(f"Error fetching COIN-M klines for {symbol}: {e}")
             return pd.DataFrame()
     
-    def calculate_futures_premiums(self, days: int = 7) -> pd.DataFrame:
+    @st.cache_data(ttl=Config.CACHE_TTL_SECONDS)
+    def calculate_futures_premiums(_self, days: int = 7) -> pd.DataFrame:
         """Calculate futures premiums for BTC and ETH quarterly contracts"""
         try:
             # Get spot prices
-            spot_data = self.get_multiple_symbols_historical(['BTC-USD', 'ETH-USD'], days=days)
+            spot_data = _self.get_multiple_symbols_historical(['BTC-USD', 'ETH-USD'], days=days)
             if not spot_data or 'BTC-USD' not in spot_data or 'ETH-USD' not in spot_data:
                 print("Failed to get spot data for premium calculation")
                 return pd.DataFrame()
@@ -598,7 +559,7 @@ class BinanceFetcher:
             
             # Process BTC futures from config
             for btc_symbol in Config.COINM_FUTURES_SYMBOLS['BTC']:
-                futures_df = self.get_coinm_klines(btc_symbol, interval='1h', days=days)
+                futures_df = _self.get_coinm_klines(btc_symbol, interval='1h', days=days)
                 if not futures_df.empty:
                     # Align timestamps
                     common_times = btc_spot.index.intersection(futures_df.index)
@@ -613,7 +574,7 @@ class BinanceFetcher:
             
             # Process ETH futures from config
             for eth_symbol in Config.COINM_FUTURES_SYMBOLS['ETH']:
-                futures_df = self.get_coinm_klines(eth_symbol, interval='1h', days=days)
+                futures_df = _self.get_coinm_klines(eth_symbol, interval='1h', days=days)
                 if not futures_df.empty:
                     # Align timestamps
                     common_times = eth_spot.index.intersection(futures_df.index)

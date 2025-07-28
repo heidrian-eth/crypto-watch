@@ -9,6 +9,10 @@ class Config:
     BINANCE_API_KEY = st.secrets.get('BINANCE_API_KEY', '')
     BINANCE_API_SECRET = st.secrets.get('BINANCE_API_SECRET', '')
     
+    # Binance API URLs
+    BINANCE_BASE_URL = os.getenv('BINANCE_BASE_URL', 'https://api.binance.com/api/v3')
+    BINANCE_FUTURES_URL = os.getenv('BINANCE_FUTURES_URL', 'https://dapi.binance.com/dapi/v1')
+    
     CACHE_DURATION_MINUTES = int(os.getenv('CACHE_DURATION_MINUTES', '1'))
     
     CRYPTO_SYMBOLS = {

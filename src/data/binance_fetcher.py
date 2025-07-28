@@ -8,9 +8,9 @@ import hashlib
 from src.utils.config import Config
 
 class BinanceFetcher:
-    def __init__(self):
-        self.base_url = "https://data.binance.com/api/v3"
-        self.dapi_url = "https://dapi.binance.com/dapi/v1"  # COIN-M futures API
+    def __init__(self, base_url=None, futures_url=None):
+        self.base_url = base_url or Config.BINANCE_BASE_URL
+        self.dapi_url = futures_url or Config.BINANCE_FUTURES_URL  # COIN-M futures API
         self.api_key = Config.BINANCE_API_KEY
         self.api_secret = Config.BINANCE_API_SECRET
         self._cache = {}

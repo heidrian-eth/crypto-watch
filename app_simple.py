@@ -21,9 +21,8 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-@st.cache_resource
-def init_fetchers_v2():
-    return TrendsDataFetcher(), BinanceFetcher()
+def init_fetchers_v2(base_url=None, futures_url=None):
+    return TrendsDataFetcher(), BinanceFetcher(base_url=base_url, futures_url=futures_url)
 
 def create_trends_chart(trends_df: pd.DataFrame, trends_alt_index: pd.Series = None, normalize=False):
     fig = go.Figure()
@@ -279,13 +278,17 @@ def main():
     st.title("🔍 Crypto Trends Dashboard")
     st.markdown("Monitor Google search trends for cryptocurrency keywords to spot volatility patterns")
     
-    trends_fetcher, binance_fetcher = init_fetchers_v2()
+    # Get URLs from session state or use defaults
+    base_url = st.session_state.get('binance_base_url', 'https://api.binance.com/api/v3')
+    futures_url = st.session_state.get('binance_futures_url', 'https://dapi.binance.com/dapi/v1')
+    
+    trends_fetcher, binance_fetcher = init_fetchers_v2(base_url=base_url, futures_url=futures_url)
     
     with st.sidebar:
         st.header("⚙️ Settings")
         
         # Debug section for API configuration
-        with st.expander("🔧 Debug Info"):
+        with st.expander("🔧 Debug Info & Configuration"):
             st.write("**API Configuration Status:**")
             if 'BINANCE_API_KEY' in st.secrets:
                 key = st.secrets['BINANCE_API_KEY']
@@ -298,6 +301,25 @@ def main():
                 st.success(f"✓ API Secret: {secret[:2]}...{secret[-2:]}")
             else:
                 st.error("✗ API Secret not found in secrets")
+            
+            st.markdown("---")
+            st.write("**API URLs:**")
+            
+            # Base URL configuration
+            base_url = st.text_input(
+                "Binance Base URL",
+                value=st.session_state.get('binance_base_url', 'https://api.binance.com/api/v3'),
+                help="Base URL for Binance spot market API calls (includes /api/v3)"
+            )
+            st.session_state['binance_base_url'] = base_url
+            
+            # Futures URL configuration
+            futures_url = st.text_input(
+                "Binance Futures URL",
+                value=st.session_state.get('binance_futures_url', 'https://dapi.binance.com/dapi/v1'),
+                help="Base URL for Binance COIN-M futures API calls (includes /dapi/v1)"
+            )
+            st.session_state['binance_futures_url'] = futures_url
         
         auto_refresh = st.checkbox("Auto-refresh", value=True)
         refresh_interval = st.slider("Refresh interval (minutes)", 1, 5, 5) * 60  # Convert to seconds

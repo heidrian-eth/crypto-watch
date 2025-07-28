@@ -22,8 +22,8 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-def init_fetchers_v2(base_url=None, futures_url=None):
-    return TrendsDataFetcher(), BinanceFetcher(base_url=base_url, futures_url=futures_url)
+def init_fetchers_v2():
+    return TrendsDataFetcher(), BinanceFetcher()
 
 def create_trends_chart(trends_df: pd.DataFrame, trends_alt_index: pd.Series = None, normalize=False):
     fig = go.Figure()
@@ -279,77 +279,12 @@ def main():
     st.title("🔍 Crypto Trends Dashboard")
     st.markdown("Monitor Google search trends for cryptocurrency keywords to spot volatility patterns")
     
-    # Get URLs from session state or use defaults
-    base_url = st.session_state.get('binance_base_url', 'https://api.binance.com/api/v3')
-    futures_url = st.session_state.get('binance_futures_url', 'https://dapi.binance.com/dapi/v1')
-    
-    trends_fetcher, binance_fetcher = init_fetchers_v2(base_url=base_url, futures_url=futures_url)
+    # Initialize fetchers with environment-configured URLs
+    trends_fetcher, binance_fetcher = init_fetchers_v2()
     
     with st.sidebar:
         st.header("⚙️ Settings")
         
-        # Debug section for API configuration
-        with st.expander("🔧 Debug Info & Configuration"):
-            st.write("**API Configuration Status:**")
-            
-            # Check API Key source
-            key_from_secrets = False
-            key_from_env = False
-            
-            try:
-                if 'BINANCE_API_KEY' in st.secrets:
-                    key = st.secrets['BINANCE_API_KEY']
-                    key_from_secrets = True
-                    st.success(f"✓ API Key from Streamlit secrets: {key[:2]}...{key[-2:]}")
-                elif os.getenv('BINANCE_API_KEY'):
-                    key = os.getenv('BINANCE_API_KEY')
-                    key_from_env = True
-                    st.success(f"✓ API Key from environment: {key[:2]}...{key[-2:]}")
-                else:
-                    st.error("✗ API Key not found in secrets or environment")
-            except:
-                if os.getenv('BINANCE_API_KEY'):
-                    key = os.getenv('BINANCE_API_KEY')
-                    key_from_env = True
-                    st.success(f"✓ API Key from environment: {key[:2]}...{key[-2:]}")
-                else:
-                    st.error("✗ API Key not found in environment")
-            
-            # Check API Secret source
-            try:
-                if 'BINANCE_API_SECRET' in st.secrets:
-                    secret = st.secrets['BINANCE_API_SECRET']
-                    st.success(f"✓ API Secret from Streamlit secrets: {secret[:2]}...{secret[-2:]}")
-                elif os.getenv('BINANCE_API_SECRET'):
-                    secret = os.getenv('BINANCE_API_SECRET')
-                    st.success(f"✓ API Secret from environment: {secret[:2]}...{secret[-2:]}")
-                else:
-                    st.error("✗ API Secret not found in secrets or environment")
-            except:
-                if os.getenv('BINANCE_API_SECRET'):
-                    secret = os.getenv('BINANCE_API_SECRET')
-                    st.success(f"✓ API Secret from environment: {secret[:2]}...{secret[-2:]}")
-                else:
-                    st.error("✗ API Secret not found in environment")
-            
-            st.markdown("---")
-            st.write("**API URLs:**")
-            
-            # Base URL configuration
-            base_url = st.text_input(
-                "Binance Base URL",
-                value=st.session_state.get('binance_base_url', 'https://api.binance.com/api/v3'),
-                help="Base URL for Binance spot market API calls (includes /api/v3)"
-            )
-            st.session_state['binance_base_url'] = base_url
-            
-            # Futures URL configuration
-            futures_url = st.text_input(
-                "Binance Futures URL",
-                value=st.session_state.get('binance_futures_url', 'https://dapi.binance.com/dapi/v1'),
-                help="Base URL for Binance COIN-M futures API calls (includes /dapi/v1)"
-            )
-            st.session_state['binance_futures_url'] = futures_url
         
         auto_refresh = st.checkbox("Auto-refresh", value=True)
         refresh_interval = st.slider("Refresh interval (minutes)", 1, 5, 5) * 60  # Convert to seconds

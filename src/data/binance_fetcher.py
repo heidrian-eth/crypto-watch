@@ -15,20 +15,6 @@ class BinanceFetcher:
         self.api_secret = Config.BINANCE_API_SECRET
         self._cache = {}
         self._cache_timestamps = {}
-        
-        # Debug: Print API key status (masked for security)
-        if self.api_key:
-            print(f"Binance API Key loaded: {self.api_key[:2]}...{self.api_key[-2:]}")
-        else:
-            print("WARNING: Binance API Key is empty or not loaded")
-        
-        if self.api_secret:
-            print(f"Binance API Secret loaded: {self.api_secret[:2]}...{self.api_secret[-2:]}")
-        else:
-            print("WARNING: Binance API Secret is empty or not loaded")
-        
-        print(f"Using base URL: {self.base_url}")
-        print(f"Using futures URL: {self.dapi_url}")
     
     def _get_from_cache(self, key: str, ttl_minutes: int = 5) -> Optional[any]:
         if key not in self._cache_timestamps:

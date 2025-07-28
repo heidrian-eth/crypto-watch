@@ -34,6 +34,21 @@ def get_binance_fetcher():
 def init_fetchers_v2():
     return get_trends_fetcher(), get_binance_fetcher()
 
+def get_responsive_legend_config():
+    """Get legend configuration for better mobile display"""
+    # This config works well for both mobile and desktop
+    # On mobile, the horizontal orientation prevents legend cutoff
+    return {
+        'orientation': 'h',  # horizontal orientation
+        'yanchor': 'bottom',
+        'y': 1.02,  # position above chart
+        'xanchor': 'center',
+        'x': 0.5,
+        'bgcolor': 'rgba(255,255,255,0.8)',
+        'bordercolor': 'rgba(0,0,0,0.2)',
+        'borderwidth': 1
+    }
+
 def create_trends_chart(trends_df: pd.DataFrame, trends_alt_index: pd.Series = None, normalize=False):
     fig = go.Figure()
     
@@ -85,7 +100,8 @@ def create_trends_chart(trends_df: pd.DataFrame, trends_alt_index: pd.Series = N
         xaxis_title="Date",
         yaxis_title=y_title,
         height=600,
-        hovermode='x unified'
+        hovermode='x unified',
+        legend=get_responsive_legend_config()
     )
     
     return fig
@@ -128,7 +144,8 @@ def create_price_chart(price_data: dict, alt_index: pd.DataFrame = None):
         xaxis_title="Date",
         yaxis_title="Normalized Price (Base 100 = 7 days ago)",
         height=500,
-        hovermode='x unified'
+        hovermode='x unified',
+        legend=get_responsive_legend_config()
     )
     
     return fig
@@ -174,7 +191,8 @@ def create_futures_premium_chart(premiums_df: pd.DataFrame):
         yaxis_title="Premium (%)",
         height=500,
         hovermode='x unified',
-        yaxis=dict(tickformat='.2f')
+        yaxis=dict(tickformat='.2f'),
+        legend=get_responsive_legend_config()
     )
     
     return fig
@@ -233,7 +251,8 @@ def create_volume_chart(volume_df: pd.DataFrame):
         yaxis_title="Normalized Volume (Base 100 = 7 days ago)",
         height=500,
         hovermode='x unified',
-        yaxis=dict(tickformat='.1f')  # One decimal place for normalized values
+        yaxis=dict(tickformat='.1f'),  # One decimal place for normalized values
+        legend=get_responsive_legend_config()
     )
     
     return fig
@@ -279,7 +298,8 @@ def create_hf_volatility_chart(hf_vol_df: pd.DataFrame):
         yaxis_title="Normalized Volatility (Base 100 = 7 days ago)",
         height=500,
         hovermode='x unified',
-        yaxis=dict(tickformat='.1f')  # One decimal place for normalized values
+        yaxis=dict(tickformat='.1f'),  # One decimal place for normalized values
+        legend=get_responsive_legend_config()
     )
     
     return fig

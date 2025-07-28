@@ -40,12 +40,12 @@ def get_responsive_legend_config():
     # On mobile, the horizontal orientation prevents legend cutoff
     return {
         'orientation': 'h',  # horizontal orientation
-        'yanchor': 'bottom',
-        'y': 1.02,  # position above chart
+        'yanchor': 'top',
+        'y': -0.2,  # position below chart
         'xanchor': 'center',
         'x': 0.5,
-        'bgcolor': 'rgba(255,255,255,0.8)',
-        'bordercolor': 'rgba(0,0,0,0.2)',
+        'bgcolor': 'rgba(0,0,0,0)',  # fully transparent background
+        'bordercolor': 'rgba(0,0,0,0.2)',  # keep subtle border
         'borderwidth': 1
     }
 

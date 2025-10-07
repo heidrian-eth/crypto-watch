@@ -56,16 +56,16 @@ class Config:
     
     # COIN-M Futures symbols for premium calculation
     COINM_FUTURES_SYMBOLS = {
-        'BTC': ['BTCUSD_250926', 'BTCUSD_251226'],  # Sep 2025, Dec 2025
-        'ETH': ['ETHUSD_250926', 'ETHUSD_251226']   # Sep 2025, Dec 2025
+        'BTC': ['BTCUSD_251226', 'BTCUSD_260327'],  # Dec 2025, Mar 2026
+        'ETH': ['ETHUSD_251226', 'ETHUSD_260327']   # Dec 2025, Mar 2026
     }
-    
+
     # Display names for futures contracts
     FUTURES_DISPLAY_NAMES = {
-        'BTCUSD_250926': 'BTC Sep 2025',
         'BTCUSD_251226': 'BTC Dec 2025',
-        'ETHUSD_250926': 'ETH Sep 2025',
-        'ETHUSD_251226': 'ETH Dec 2025'
+        'BTCUSD_260327': 'BTC Mar 2026',
+        'ETHUSD_251226': 'ETH Dec 2025',
+        'ETHUSD_260327': 'ETH Mar 2026'
     }
     
     PRICE_PAIRS = ['BTCUSD', 'ETHUSD']
